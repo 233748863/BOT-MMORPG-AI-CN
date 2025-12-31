@@ -1,0 +1,30 @@
+# MMORPG游戏AI助手 - 依赖列表
+
+# ==================== 深度学习框架 ====================
+# TensorFlow (推荐2.15或2.16+)
+tensorflow>=2.15.0
+
+# TFLearn - 注意：官方版本与TensorFlow 2.16+不兼容
+# 方案1: 使用TensorFlow 2.15 + 官方tflearn
+# pip install tensorflow==2.15.0 tflearn==0.5.0
+
+# 方案2: 使用TensorFlow 2.16+ + 社区修复版tflearn (推荐)
+# pip install tensorflow
+# pip install git+https://github.com/MihaMarkic/tflearn.git@fix/is_sequence_missing
+
+# ==================== 计算机视觉 ====================
+opencv-python>=4.5.0
+
+# ==================== 数值计算 ====================
+numpy>=1.19.0
+pandas>=1.3.0
+
+# ==================== Windows API ====================
+pywin32>=300
+
+# ==================== 可视化 ====================
+matplotlib>=3.4.0
+tqdm>=4.60.0
+
+# ==================== 其他工具 ====================
+Pillow>=8.0.0
