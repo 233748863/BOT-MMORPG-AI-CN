@@ -1,0 +1,517 @@
+# -*- coding: utf-8 -*-
+"""
+首页组件 (状态仪表盘)
+
+显示系统状态概览、快捷操作按钮和使用提示。
+"""
+
+import os
+from pathlib import Path
+from datetime import datetime
+from typing import Optional, Dict, Any
+
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
+    QPushButton, QFrame, QGridLayout, QSizePolicy
+)
+from PySide6.QtCore import Signal, Qt, QTimer
+from PySide6.QtGui import QFont
+
+from 界面.样式.主题 import 颜色, 获取状态颜色
+
+
+class 状态卡片(QFrame):
+    """系统状态卡片组件"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setProperty("class", "card")
+        self._初始化界面()
+    
+    def _初始化界面(self) -> None:
+        """初始化界面"""
+        self.setStyleSheet(f"""
+            QFrame {{
+                background-color: {颜色.卡片背景};
+                border-radius: 12px;
+                border: 1px solid {颜色.边框};
+            }}
+        """)
+        
+        布局 = QVBoxLayout(self)
+        布局.setContentsMargins(20, 16, 20, 16)
+        布局.setSpacing(12)
+        
+        # 标题
+        标题 = QLabel("📊 系统状态")
+        标题.setStyleSheet(f"""
+            font-size: 16px;
+            font-weight: bold;
+            color: {颜色.标题};
+        """)
+        布局.addWidget(标题)
+        
+        # 状态网格
+        状态网格 = QGridLayout()
+        状态网格.setSpacing(16)
+        
+        # 模型状态
+        self._模型状态标签 = self._创建状态项("模型状态:", "检测中...", 状态网格, 0, 0)
+        
+        # GPU状态
+        self._GPU状态标签 = self._创建状态项("GPU:", "检测中...", 状态网格, 0, 1)
+        
+        # 数据文件
+        self._数据文件标签 = self._创建状态项("数据文件:", "检测中...", 状态网格, 1, 0)
+        
+        # 上次训练
+        self._上次训练标签 = self._创建状态项("上次训练:", "检测中...", 状态网格, 1, 1)
+        
+        布局.addLayout(状态网格)
+    
+    def _创建状态项(self, 标题: str, 初始值: str, 网格: QGridLayout, 行: int, 列: int) -> QLabel:
+        """创建状态项"""
+        容器 = QWidget()
+        容器布局 = QHBoxLayout(容器)
+        容器布局.setContentsMargins(0, 0, 0, 0)
+        容器布局.setSpacing(8)
+        
+        标题标签 = QLabel(标题)
+        标题标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 13px;")
+        容器布局.addWidget(标题标签)
+        
+        值标签 = QLabel(初始值)
+        值标签.setStyleSheet(f"color: {颜色.文字}; font-size: 13px; font-weight: 500;")
+        容器布局.addWidget(值标签)
+        容器布局.addStretch()
+        
+        网格.addWidget(容器, 行, 列)
+        return 值标签
+    
+    def 更新模型状态(self, 已加载: bool, 路径: str = "") -> None:
+        """更新模型状态显示"""
+        if 已加载:
+            self._模型状态标签.setText("✅ 已加载")
+            self._模型状态标签.setStyleSheet(f"color: {颜色.成功}; font-size: 13px; font-weight: 500;")
+        else:
+            self._模型状态标签.setText("❌ 未加载")
+            self._模型状态标签.setStyleSheet(f"color: {颜色.错误}; font-size: 13px; font-weight: 500;")
+    
+    def 更新GPU状态(self, 可用: bool, 设备名: str = "") -> None:
+        """更新GPU状态显示"""
+        if 可用:
+            显示文本 = f"✅ 可用"
+            if 设备名:
+                显示文本 = f"✅ {设备名}"
+            self._GPU状态标签.setText(显示文本)
+            self._GPU状态标签.setStyleSheet(f"color: {颜色.成功}; font-size: 13px; font-weight: 500;")
+        else:
+            self._GPU状态标签.setText("⚠️ 仅CPU")
+            self._GPU状态标签.setStyleSheet(f"color: {颜色.警告}; font-size: 13px; font-weight: 500;")
+    
+    def 更新数据文件状态(self, 文件数: int, 样本数: int) -> None:
+        """更新数据文件状态显示"""
+        if 文件数 > 0:
+            self._数据文件标签.setText(f"📁 {文件数}个文件 ({样本数}样本)")
+            self._数据文件标签.setStyleSheet(f"color: {颜色.成功}; font-size: 13px; font-weight: 500;")
+        else:
+            self._数据文件标签.setText("📁 无数据")
+            self._数据文件标签.setStyleSheet(f"color: {颜色.警告}; font-size: 13px; font-weight: 500;")
+    
+    def 更新训练状态(self, 上次训练时间: Optional[datetime], 损失值: Optional[float] = None) -> None:
+        """更新上次训练状态显示"""
+        if 上次训练时间:
+            时间字符串 = 上次训练时间.strftime("%Y-%m-%d %H:%M")
+            if 损失值 is not None:
+                self._上次训练标签.setText(f"{时间字符串} (损失: {损失值:.4f})")
+            else:
+                self._上次训练标签.setText(时间字符串)
+            self._上次训练标签.setStyleSheet(f"color: {颜色.文字}; font-size: 13px; font-weight: 500;")
+        else:
+            self._上次训练标签.setText("暂无记录")
+            self._上次训练标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 13px; font-weight: 500;")
+
+
+class 快捷按钮(QPushButton):
+    """快捷操作按钮组件"""
+    
+    def __init__(self, 图标: str, 标题: str, 描述: str, parent=None):
+        super().__init__(parent)
+        self._图标 = 图标
+        self._标题 = 标题
+        self._描述 = 描述
+        self._初始化样式()
+    
+    def _初始化样式(self) -> None:
+        """初始化按钮样式"""
+        self.setFixedSize(145, 90)
+        self.setCursor(Qt.PointingHandCursor)
+        self.setText(f"{self._图标}\n{self._标题}")
+        self.setToolTip(self._描述)
+        
+        self.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.卡片背景};
+                border: 1px solid {颜色.边框};
+                border-radius: 12px;
+                font-size: 14px;
+                font-weight: 500;
+                color: {颜色.标题};
+                text-align: center;
+                padding: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {颜色.选中背景};
+                border-color: {颜色.主色};
+            }}
+            QPushButton:pressed {{
+                background-color: {颜色.悬停背景};
+            }}
+        """)
+
+
+class 提示卡片(QFrame):
+    """使用提示卡片组件"""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setProperty("class", "card")
+        self._初始化界面()
+    
+    def _初始化界面(self) -> None:
+        """初始化界面"""
+        self.setStyleSheet(f"""
+            QFrame {{
+                background-color: {颜色.选中背景};
+                border-radius: 12px;
+                border: 1px solid {颜色.边框};
+            }}
+        """)
+        
+        布局 = QHBoxLayout(self)
+        布局.setContentsMargins(16, 12, 16, 12)
+        
+        图标 = QLabel("💡")
+        图标.setStyleSheet("font-size: 18px;")
+        布局.addWidget(图标)
+        
+        self._提示文本 = QLabel("提示: 首次使用请先收集训练数据")
+        self._提示文本.setStyleSheet(f"color: {颜色.主色}; font-size: 13px;")
+        self._提示文本.setWordWrap(True)
+        布局.addWidget(self._提示文本, 1)
+    
+    def 设置提示(self, 文本: str) -> None:
+        """设置提示文本"""
+        self._提示文本.setText(f"提示: {文本}")
+
+
+
+class 首页(QWidget):
+    """
+    首页组件 (状态仪表盘)
+    
+    显示系统状态概览、快捷操作按钮和使用提示。
+    """
+    
+    # 信号定义
+    快速运行点击 = Signal()
+    开始录制点击 = Signal()
+    训练模型点击 = Signal()
+    数据管理点击 = Signal()
+    
+    def __init__(self, parent=None):
+        """初始化首页"""
+        super().__init__(parent)
+        self._初始化界面()
+        
+        # 延迟检测系统状态
+        QTimer.singleShot(100, self._检测系统状态)
+    
+    def _初始化界面(self) -> None:
+        """初始化界面布局"""
+        主布局 = QVBoxLayout(self)
+        主布局.setContentsMargins(24, 24, 24, 24)
+        主布局.setSpacing(20)
+        
+        # 页面标题
+        标题容器 = QWidget()
+        标题布局 = QHBoxLayout(标题容器)
+        标题布局.setContentsMargins(0, 0, 0, 0)
+        
+        标题 = QLabel("🎮 MMORPG游戏AI助手")
+        标题.setStyleSheet(f"""
+            font-size: 22px;
+            font-weight: bold;
+            color: {颜色.标题};
+        """)
+        标题布局.addWidget(标题)
+        标题布局.addStretch()
+        
+        主布局.addWidget(标题容器)
+        
+        # 系统状态卡片
+        self._状态卡片 = 状态卡片()
+        主布局.addWidget(self._状态卡片)
+        
+        # 快捷操作区域
+        快捷操作标题 = QLabel("快捷操作")
+        快捷操作标题.setStyleSheet(f"""
+            font-size: 14px;
+            font-weight: 500;
+            color: {颜色.标题};
+        """)
+        主布局.addWidget(快捷操作标题)
+        
+        # 快捷按钮网格
+        按钮容器 = QWidget()
+        按钮布局 = QHBoxLayout(按钮容器)
+        按钮布局.setContentsMargins(0, 0, 0, 0)
+        按钮布局.setSpacing(16)
+        
+        # 创建4个快捷按钮
+        self._快速运行按钮 = 快捷按钮("▶️", "快速运行", "启动AI机器人")
+        self._快速运行按钮.clicked.connect(self.快速运行点击.emit)
+        按钮布局.addWidget(self._快速运行按钮)
+        
+        self._开始录制按钮 = 快捷按钮("🎥", "开始录制", "收集训练数据")
+        self._开始录制按钮.clicked.connect(self.开始录制点击.emit)
+        按钮布局.addWidget(self._开始录制按钮)
+        
+        self._训练模型按钮 = 快捷按钮("🧠", "训练模型", "训练AI大脑")
+        self._训练模型按钮.clicked.connect(self.训练模型点击.emit)
+        按钮布局.addWidget(self._训练模型按钮)
+        
+        self._数据管理按钮 = 快捷按钮("📁", "数据管理", "管理训练数据")
+        self._数据管理按钮.clicked.connect(self.数据管理点击.emit)
+        按钮布局.addWidget(self._数据管理按钮)
+        
+        按钮布局.addStretch()
+        主布局.addWidget(按钮容器)
+        
+        # 使用提示
+        self._提示卡片 = 提示卡片()
+        主布局.addWidget(self._提示卡片)
+        
+        # 添加弹性空间
+        主布局.addStretch()
+    
+    def _检测系统状态(self) -> None:
+        """检测并更新系统状态"""
+        状态 = 检测系统状态()
+        
+        # 更新模型状态
+        self._状态卡片.更新模型状态(状态["模型已加载"], 状态.get("模型路径", ""))
+        
+        # 更新GPU状态
+        self._状态卡片.更新GPU状态(状态["GPU可用"], 状态.get("GPU设备名", ""))
+        
+        # 更新数据文件状态
+        self._状态卡片.更新数据文件状态(状态["数据文件数"], 状态["样本总数"])
+        
+        # 更新训练状态
+        self._状态卡片.更新训练状态(状态.get("上次训练时间"), 状态.get("上次损失值"))
+        
+        # 更新提示
+        self._更新提示(状态)
+    
+    def _更新提示(self, 状态: Dict[str, Any]) -> None:
+        """根据系统状态更新提示"""
+        if 状态["数据文件数"] == 0:
+            self._提示卡片.设置提示("首次使用请先收集训练数据")
+        elif not 状态["模型已加载"]:
+            self._提示卡片.设置提示("已有训练数据，可以开始训练模型了")
+        elif not 状态["GPU可用"]:
+            self._提示卡片.设置提示("未检测到GPU，将使用CPU运行（速度较慢）")
+        else:
+            self._提示卡片.设置提示("系统就绪，可以启动AI机器人了")
+    
+    def 刷新状态(self) -> None:
+        """手动刷新系统状态"""
+        self._检测系统状态()
+    
+    def 获取状态卡片(self) -> 状态卡片:
+        """获取状态卡片组件"""
+        return self._状态卡片
+
+
+def 检测系统状态() -> Dict[str, Any]:
+    """
+    检测系统状态
+    
+    返回:
+        包含系统状态信息的字典
+    """
+    状态 = {
+        "模型已加载": False,
+        "模型路径": "",
+        "GPU可用": False,
+        "GPU设备名": "",
+        "数据文件数": 0,
+        "样本总数": 0,
+        "上次训练时间": None,
+        "上次损失值": None,
+    }
+    
+    # 检测模型文件
+    状态["模型已加载"], 状态["模型路径"] = _检测模型文件()
+    
+    # 检测GPU
+    状态["GPU可用"], 状态["GPU设备名"] = _检测GPU()
+    
+    # 统计数据文件
+    状态["数据文件数"], 状态["样本总数"] = _统计数据文件()
+    
+    # 检测上次训练信息
+    状态["上次训练时间"], 状态["上次损失值"] = _检测训练记录()
+    
+    return 状态
+
+
+def _检测模型文件() -> tuple:
+    """
+    检测模型文件是否存在
+    
+    返回:
+        (是否存在, 模型路径)
+    """
+    try:
+        from 配置.设置 import 模型保存路径, 预训练模型路径
+        
+        # 检查训练后的模型
+        模型目录 = Path(模型保存路径)
+        if 模型目录.exists():
+            # 检查是否有模型文件
+            模型文件 = list(模型目录.glob("*.index")) + list(模型目录.glob("*.h5")) + list(模型目录.glob("*.pt"))
+            if 模型文件:
+                return True, str(模型目录)
+        
+        # 检查预训练模型
+        预训练目录 = Path(预训练模型路径).parent
+        if 预训练目录.exists():
+            索引文件 = Path(f"{预训练模型路径}.index")
+            if 索引文件.exists():
+                return True, str(预训练目录)
+        
+        return False, ""
+    except Exception:
+        return False, ""
+
+
+def _检测GPU() -> tuple:
+    """
+    检测GPU是否可用
+    
+    返回:
+        (是否可用, 设备名称)
+    """
+    try:
+        import tensorflow as tf
+        gpus = tf.config.list_physical_devices('GPU')
+        if gpus:
+            # 获取第一个GPU的名称
+            设备名 = gpus[0].name.split('/')[-1] if gpus else ""
+            return True, 设备名
+        return False, ""
+    except Exception:
+        pass
+    
+    # 尝试PyTorch
+    try:
+        import torch
+        if torch.cuda.is_available():
+            设备名 = torch.cuda.get_device_name(0)
+            return True, 设备名
+        return False, ""
+    except Exception:
+        pass
+    
+    return False, ""
+
+
+def _统计数据文件() -> tuple:
+    """
+    统计数据文件数量和样本数
+    
+    返回:
+        (文件数, 样本总数)
+    """
+    try:
+        from 配置.设置 import 数据保存路径, 每文件样本数
+        import numpy as np
+        
+        数据目录 = Path(数据保存路径)
+        if not 数据目录.exists():
+            return 0, 0
+        
+        # 查找所有npz文件
+        数据文件列表 = list(数据目录.glob("*.npz"))
+        文件数 = len(数据文件列表)
+        
+        if 文件数 == 0:
+            return 0, 0
+        
+        # 统计样本数
+        样本总数 = 0
+        for 文件路径 in 数据文件列表:
+            try:
+                数据 = np.load(str(文件路径), allow_pickle=True)
+                if 'images' in 数据:
+                    样本总数 += len(数据['images'])
+                elif 'frames' in 数据:
+                    样本总数 += len(数据['frames'])
+                else:
+                    # 估算样本数
+                    样本总数 += 每文件样本数
+            except Exception:
+                样本总数 += 每文件样本数
+        
+        return 文件数, 样本总数
+    except Exception:
+        return 0, 0
+
+
+def _检测训练记录() -> tuple:
+    """
+    检测上次训练记录
+    
+    返回:
+        (上次训练时间, 上次损失值)
+    """
+    try:
+        from 配置.设置 import 模型保存路径
+        
+        模型目录 = Path(模型保存路径)
+        if not 模型目录.exists():
+            return None, None
+        
+        # 查找最新的模型文件
+        模型文件列表 = list(模型目录.glob("*.index")) + list(模型目录.glob("*.h5")) + list(模型目录.glob("*.pt"))
+        
+        if not 模型文件列表:
+            return None, None
+        
+        # 获取最新文件的修改时间
+        最新文件 = max(模型文件列表, key=lambda f: f.stat().st_mtime)
+        修改时间 = datetime.fromtimestamp(最新文件.stat().st_mtime)
+        
+        # 尝试读取训练日志获取损失值
+        日志文件 = 模型目录 / "training_log.txt"
+        损失值 = None
+        if 日志文件.exists():
+            try:
+                with open(日志文件, 'r', encoding='utf-8') as f:
+                    行列表 = f.readlines()
+                    if 行列表:
+                        最后一行 = 行列表[-1]
+                        # 尝试解析损失值
+                        if "loss" in 最后一行.lower():
+                            import re
+                            匹配 = re.search(r'loss[:\s]+([0-9.]+)', 最后一行.lower())
+                            if 匹配:
+                                损失值 = float(匹配.group(1))
+            except Exception:
+                pass
+        
+        return 修改时间, 损失值
+    except Exception:
+        return None, None
