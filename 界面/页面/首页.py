@@ -292,6 +292,31 @@ class 首页(QWidget):
         self._提示卡片 = 提示卡片()
         主布局.addWidget(self._提示卡片)
         
+        # 快捷键提示
+        快捷键卡片 = QFrame()
+        快捷键卡片.setStyleSheet(f"""
+            QFrame {{
+                background-color: {颜色.卡片背景};
+                border-radius: 12px;
+                border: 1px solid {颜色.边框};
+            }}
+        """)
+        快捷键布局 = QVBoxLayout(快捷键卡片)
+        快捷键布局.setContentsMargins(16, 12, 16, 12)
+        快捷键布局.setSpacing(8)
+        
+        快捷键标题 = QLabel("⌨️ 快捷键")
+        快捷键标题.setStyleSheet(f"color: {颜色.标题}; font-size: 14px; font-weight: 500;")
+        快捷键布局.addWidget(快捷键标题)
+        
+        快捷键内容 = QLabel(
+            "T - 暂停/继续  |  ESC - 停止  |  Ctrl+S - 保存配置  |  F1 - 帮助"
+        )
+        快捷键内容.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px;")
+        快捷键布局.addWidget(快捷键内容)
+        
+        主布局.addWidget(快捷键卡片)
+        
         # 添加弹性空间
         主布局.addStretch()
     

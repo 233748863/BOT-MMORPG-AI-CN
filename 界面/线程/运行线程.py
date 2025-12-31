@@ -22,13 +22,19 @@ from PySide6.QtCore import QThread, Signal
 if 项目根目录 not in sys.path:
     sys.path.insert(0, 项目根目录)
 
+# 导入错误处理模块
+try:
+    from 界面.组件.错误处理 import 获取错误处理器
+except ImportError:
+    获取错误处理器 = None
+
 
 class 运行线程(QThread):
     """
     机器人运行后台线程
     
     在后台执行机器人运行任务，通过信号更新界面状态。
-    支持基础模式和增强模式。
+    支持基础模式和增强模式。包含完善的错误处理机制。
     """
     
     # 信号定义
@@ -79,6 +85,13 @@ class 运行线程(QThread):
         # 缓存
         self._上次检测结果 = []
         self._上次状态 = "未知"
+        
+        # 错误处理器
+        self._错误处理器 = 获取错误处理器() if 获取错误处理器 else None
+        
+        # 连续错误计数（用于错误恢复）
+        self._连续错误计数 = 0
+        self._最大连续错误数 = 20
     
     def 设置子模式(self, 模式: str) -> None:
         """设置子模式 (主线任务/自动战斗)"""
@@ -95,8 +108,24 @@ class 运行线程(QThread):
         except Exception as e:
             import traceback
             错误详情 = traceback.format_exc()
+            
+            # 记录到错误处理器
+            if self._错误处理器:
+                self._错误处理器.处理错误(e, "机器人运行", "错误", 显示通知=False)
+            
             self.错误发生.emit(f"运行错误: {str(e)}\n{错误详情}")
             self.任务完成.emit(False, f"运行失败: {str(e)}")
+    
+    def _记录错误(self, 消息: str, 严重级别: str = "警告") -> None:
+        """
+        记录错误到错误处理器
+        
+        参数:
+            消息: 错误消息
+            严重级别: 严重级别
+        """
+        if self._错误处理器:
+            self._错误处理器.记录错误消息(消息, "机器人运行", 严重级别, 显示通知=False)
     
     def _执行运行(self) -> None:
         """执行运行主逻辑"""
@@ -166,6 +195,13 @@ class 运行线程(QThread):
                 time.sleep(0.1)
                 continue
             
+            # 检查连续错误是否过多
+            if self._连续错误计数 >= self._最大连续错误数:
+                错误消息 = f"连续错误次数过多({self._连续错误计数}次)，自动停止运行"
+                self._记录错误(错误消息, "错误")
+                self.错误发生.emit(错误消息)
+                break
+            
             循环开始时间 = time.time()
             
             try:
@@ -223,6 +259,9 @@ class 运行线程(QThread):
                 }
                 self.状态更新.emit(状态数据)
                 
+                # 重置连续错误计数（成功处理一帧）
+                self._连续错误计数 = 0
+                
                 # 检测是否卡住
                 if 平均运动量 < 运动检测阈值 and len(self._运动日志) >= 运动日志长度:
                     self._处理卡住()
@@ -231,6 +270,8 @@ class 运行线程(QThread):
                 time.sleep(0.01)
                 
             except Exception as e:
+                self._连续错误计数 += 1
+                self._记录错误(f"运行循环错误: {str(e)}", "警告")
                 self.错误发生.emit(f"运行循环错误: {str(e)}")
                 time.sleep(0.1)
         

@@ -21,12 +21,19 @@ from PySide6.QtCore import QThread, Signal
 if 项目根目录 not in sys.path:
     sys.path.insert(0, 项目根目录)
 
+# 导入错误处理模块
+try:
+    from 界面.组件.错误处理 import 获取错误处理器
+except ImportError:
+    获取错误处理器 = None
+
 
 class 数据收集线程(QThread):
     """
     数据收集后台线程
     
     在后台执行数据收集任务，通过信号更新界面状态。
+    包含完善的错误处理机制。
     """
     
     # 信号定义
@@ -53,6 +60,13 @@ class 数据收集线程(QThread):
         self._样本数量 = 0
         self._文件编号 = 1
         self._帧率 = 0.0
+        
+        # 错误处理器
+        self._错误处理器 = 获取错误处理器() if 获取错误处理器 else None
+        
+        # 连续错误计数（用于错误恢复）
+        self._连续错误计数 = 0
+        self._最大连续错误数 = 10
     
     def 设置训练模式(self, 模式: str) -> None:
         """设置训练模式"""
@@ -63,8 +77,41 @@ class 数据收集线程(QThread):
         try:
             self._执行数据收集()
         except Exception as e:
-            self.错误发生.emit(f"数据收集错误: {str(e)}")
+            import traceback
+            错误详情 = traceback.format_exc()
+            错误消息 = f"数据收集错误: {str(e)}"
+            
+            # 记录到错误处理器
+            if self._错误处理器:
+                self._错误处理器.处理错误(e, "数据收集", "错误", 显示通知=False)
+            
+            self.错误发生.emit(错误消息)
             self.任务完成.emit(False, f"数据收集失败: {str(e)}")
+    
+    def _记录错误(self, 消息: str, 严重级别: str = "警告") -> None:
+        """
+        记录错误到错误处理器
+        
+        参数:
+            消息: 错误消息
+            严重级别: 严重级别
+        """
+        if self._错误处理器:
+            self._错误处理器.记录错误消息(消息, "数据收集", 严重级别, 显示通知=False)
+    
+    def _安全截取屏幕(self, 截取屏幕, 游戏窗口区域):
+        """
+        安全地截取屏幕，包含错误处理
+        
+        返回:
+            屏幕图像或None（如果失败）
+        """
+        try:
+            return 截取屏幕(region=游戏窗口区域)
+        except Exception as e:
+            self._连续错误计数 += 1
+            self._记录错误(f"截取屏幕失败: {str(e)}", "警告")
+            return None
     
     def _执行数据收集(self) -> None:
         """执行数据收集主逻辑"""
@@ -103,9 +150,20 @@ class 数据收集线程(QThread):
                 time.sleep(0.1)
                 continue
             
+            # 检查连续错误是否过多
+            if self._连续错误计数 >= self._最大连续错误数:
+                错误消息 = f"连续错误次数过多({self._连续错误计数}次)，自动停止数据收集"
+                self._记录错误(错误消息, "错误")
+                self.错误发生.emit(错误消息)
+                break
+            
             try:
-                # 截取屏幕
-                屏幕 = 截取屏幕(region=游戏窗口区域)
+                # 安全截取屏幕
+                屏幕 = self._安全截取屏幕(截取屏幕, 游戏窗口区域)
+                if 屏幕 is None:
+                    time.sleep(0.1)
+                    continue
+                
                 屏幕 = cv2.resize(屏幕, (模型输入宽度, 模型输入高度))
                 屏幕_RGB = cv2.cvtColor(屏幕, cv2.COLOR_BGR2RGB)
                 
@@ -121,6 +179,9 @@ class 数据收集线程(QThread):
                 训练数据.append([屏幕_RGB, 动作])
                 self._样本数量 += 1
                 帧计数 += 1
+                
+                # 重置连续错误计数（成功处理一帧）
+                self._连续错误计数 = 0
                 
                 # 计算帧率 (每50帧更新一次)
                 if 帧计数 % 50 == 0:
@@ -150,19 +211,25 @@ class 数据收集线程(QThread):
                 
                 # 自动保存
                 if len(训练数据) >= 每文件样本数:
-                    np.save(str(文件名), 训练数据)
-                    self.文件保存.emit(str(文件名), len(训练数据))
-                    self.进度更新.emit(100, f"已保存: {文件名}")
-                    
-                    # 重置
-                    训练数据 = []
-                    self._文件编号 += 1
-                    文件名 = 数据目录 / f'训练数据-{self._文件编号}.npy'
+                    try:
+                        np.save(str(文件名), 训练数据)
+                        self.文件保存.emit(str(文件名), len(训练数据))
+                        self.进度更新.emit(100, f"已保存: {文件名}")
+                        
+                        # 重置
+                        训练数据 = []
+                        self._文件编号 += 1
+                        文件名 = 数据目录 / f'训练数据-{self._文件编号}.npy'
+                    except Exception as e:
+                        self._记录错误(f"保存数据文件失败: {str(e)}", "错误")
+                        self.错误发生.emit(f"保存数据文件失败: {str(e)}")
                 
                 # 短暂休眠以控制帧率
                 time.sleep(0.01)
                 
             except Exception as e:
+                self._连续错误计数 += 1
+                self._记录错误(f"采集帧错误: {str(e)}", "警告")
                 self.错误发生.emit(f"采集帧错误: {str(e)}")
                 time.sleep(0.1)
         
