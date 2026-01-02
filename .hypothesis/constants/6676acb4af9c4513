@@ -1,0 +1,4 @@
+# file: E:\BOT-MMORPG-AI-CN\核心\自动调参.py
+# hypothesis_version: 6.148.8
+
+[0.0, 0.05, 0.1, 0.3, 0.4, 0.5, 0.6, 0.7, 0.9, 1.0, 2.0, 'ParameterSpace', 'PerformanceMetric', 'TuningRecord', 'action_cooldown', 'action_success_rate', 'aggressive', 'balanced', 'conservative', 'current_value', 'default_value', 'locked', 'max_value', 'metrics.json', 'min_value', 'name', 'new_value', 'old_value', 'parameter_name', 'parameters.json', 'performance_after', 'performance_before', 'r', 'reason', 'records.json', 'rule_priority_weight', 'state_accuracy', 'step', 'stuck_count', 'task_efficiency', 'timestamp', 'utf-8', 'w', '保守', '减少', '参数名称不能为空', '增加', '平衡', '所有参数都已锁定，跳过自动调参', '无法评估: 缺少调整前的性能数据', '未知', '激进', '配置/tuning']

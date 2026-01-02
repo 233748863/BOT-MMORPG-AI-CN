@@ -33,3 +33,26 @@ from .决策规则 import (
     获取紧急规则, 获取拾取规则, 获取移动规则, 获取菜单规则,
     创建自定义规则
 )
+
+# 配置管理模块
+from .配置管理 import (
+    WindowConfig, KeyMapping, UIRegions, DetectionParams, DecisionRules,
+    GameProfile, ConfigManager
+)
+
+# 智能录制模块
+from .智能录制 import (
+    事件类型, 价值等级, GameEvent, RecordingSegment, RecordingStatistics,
+    StatisticsService, ValueEvaluator, DataFilter
+)
+
+# 自动调参模块
+from .自动调参 import (
+    AggressivenessLevel, PerformanceMetric, ParameterSpace, TuningRecord,
+    AutoTuner, get_default_parameter_spaces
+)
+
+# 模块管理器（错误降级机制）
+from .模块管理 import (
+    模块状态, 模块信息, 模块管理器, 获取模块管理器, 重置模块管理器
+)

@@ -1,0 +1,74 @@
+{
+  "name": "test_migration",
+  "game_name": "测试游戏",
+  "created_at": "2026-01-02T14:55:35.529158",
+  "updated_at": "2026-01-02T14:55:35.529158",
+  "window_config": {
+    "x": 0,
+    "y": 40,
+    "width": 1920,
+    "height": 1080
+  },
+  "key_mapping": {
+    "move_keys": {
+      "W": "up",
+      "S": "down",
+      "A": "left",
+      "D": "right"
+    },
+    "skill_keys": {
+      "1": "skill1",
+      "2": "skill2",
+      "3": "skill3",
+      "4": "skill4",
+      "5": "skill5",
+      "6": "skill6"
+    },
+    "interact_key": "F"
+  },
+  "ui_regions": {
+    "health_bar": [
+      0,
+      0,
+      200,
+      20
+    ],
+    "skill_bar": [
+      0,
+      0,
+      400,
+      50
+    ],
+    "dialog_area": [
+      0,
+      0,
+      800,
+      200
+    ],
+    "minimap": [
+      0,
+      0,
+      200,
+      200
+    ]
+  },
+  "detection_params": {
+    "yolo_model_path": "模型/预训练模型/test",
+    "confidence_threshold": 0.5
+  },
+  "decision_rules": {
+    "state_priorities": {
+      "combat": 1,
+      "dialog": 2,
+      "looting": 3,
+      "moving": 4,
+      "idle": 5
+    },
+    "action_weights": {
+      "skill": 1.0,
+      "move": 0.8,
+      "interact": 0.9,
+      "wait": 0.3
+    }
+  }
+}

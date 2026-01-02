@@ -1,0 +1,4 @@
+# file: E:\BOT-MMORPG-AI-CN\核心\配置管理.py
+# hypothesis_version: 6.148.8
+
+[0.0, 0.3, 0.5, 0.8, 0.9, 1.0, 200, 400, 800, 1080, 1920, '-', '.json', '1', '2', '3', '4', 'A', 'D', 'DecisionRules', 'DetectionParams', 'F', 'GameProfile', 'KeyMapping', 'S', 'UIRegions', 'W', 'WindowConfig', '_', 'action_weights', 'combat', 'confidence_threshold', 'created_at', 'decision_rules', 'detection_params', 'dialog', 'dialog_area', 'down', 'game_name', 'health_bar', 'height', 'idle', 'interact', 'interact_key', 'key_mapping', 'left', 'looting', 'minimap', 'move', 'move_keys', 'moving', 'name', 'r', 'right', 'skill', 'skill1', 'skill2', 'skill3', 'skill4', 'skill_bar', 'skill_keys', 'state_priorities', 'ui_regions', 'unnamed', 'up', 'updated_at', 'utf-8', 'w', 'wait', 'width', 'window_config', 'x', 'y', 'yolo_model_path', '中', '导入文件缺少必要字段: name', '导入路径不能为空', '导出路径不能为空', '文', '档案名称不能为空', '模型/预训练模型/yolo.pt', '游戏名称不能为空', '配置/last_profile.txt', '配置/profiles', '配置档案不能为空']

@@ -2,16 +2,16 @@
 """
 数据收集页面
 
-提供数据收集功能的图形界面，包括控制面板、状态监控和游戏画面预览。
+提供数据收集功能的图形界面，包括控制面板、状态监控、游戏画面预览和智能录制控制。
 """
 
-from typing import Optional
+from typing import Optional, Dict, Any
 import numpy as np
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QFrame, QGridLayout, QComboBox,
-    QSizePolicy
+    QSizePolicy, QCheckBox, QProgressBar
 )
 from PySide6.QtCore import Signal, Slot, Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
@@ -304,13 +304,13 @@ class 画面预览(QFrame):
         """)
         
         布局 = QVBoxLayout(self)
-        布局.setContentsMargins(20, 16, 20, 16)
-        布局.setSpacing(12)
+        布局.setContentsMargins(16, 12, 16, 12)
+        布局.setSpacing(8)
         
         # 标题
         标题 = QLabel("🖥️ 游戏画面预览")
         标题.setStyleSheet(f"""
-            font-size: 16px;
+            font-size: 14px;
             font-weight: bold;
             color: {颜色.标题};
         """)
@@ -318,13 +318,13 @@ class 画面预览(QFrame):
         
         # 预览区域
         self._预览标签 = QLabel()
-        self._预览标签.setFixedSize(320, 180)
+        self._预览标签.setFixedSize(280, 160)
         self._预览标签.setAlignment(Qt.AlignCenter)
         self._预览标签.setStyleSheet(f"""
             background-color: #1E293B;
             border-radius: 8px;
             color: {颜色.次要文字};
-            font-size: 13px;
+            font-size: 12px;
         """)
         self._预览标签.setText("等待录制开始...")
         布局.addWidget(self._预览标签, alignment=Qt.AlignCenter)
@@ -346,7 +346,7 @@ class 画面预览(QFrame):
             # 缩放到预览尺寸
             像素图 = QPixmap.fromImage(q图像)
             缩放像素图 = 像素图.scaled(
-                320, 180, 
+                280, 160, 
                 Qt.KeepAspectRatio, 
                 Qt.SmoothTransformation
             )
@@ -361,12 +361,266 @@ class 画面预览(QFrame):
         self._预览标签.setText("等待录制开始...")
 
 
+class 智能录制面板(QFrame):
+    """智能录制控制面板组件
+    
+    显示实时价值评分和过滤选项控件。
+    需求: 2.6, 3.1
+    """
+    
+    # 信号定义
+    过滤选项改变 = Signal(str)  # 过滤选项: "全部", "仅高价值", "自动过滤"
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setProperty("class", "card")
+        self._初始化界面()
+    
+    def _初始化界面(self) -> None:
+        """初始化界面"""
+        self.setStyleSheet(f"""
+            QFrame {{
+                background-color: {颜色.卡片背景};
+                border-radius: 12px;
+                border: 1px solid {颜色.边框};
+            }}
+        """)
+        
+        布局 = QVBoxLayout(self)
+        布局.setContentsMargins(16, 12, 16, 12)
+        布局.setSpacing(10)
+        
+        # 标题
+        标题 = QLabel("🎯 智能录制")
+        标题.setStyleSheet(f"""
+            font-size: 14px;
+            font-weight: bold;
+            color: {颜色.标题};
+        """)
+        布局.addWidget(标题)
+        
+        # 实时价值评分显示 (需求 3.1)
+        评分容器 = QWidget()
+        评分布局 = QVBoxLayout(评分容器)
+        评分布局.setContentsMargins(0, 0, 0, 0)
+        评分布局.setSpacing(4)
+        
+        评分标题行 = QWidget()
+        评分标题布局 = QHBoxLayout(评分标题行)
+        评分标题布局.setContentsMargins(0, 0, 0, 0)
+        
+        评分标签 = QLabel("当前价值评分:")
+        评分标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px;")
+        评分标题布局.addWidget(评分标签)
+        
+        self._评分值标签 = QLabel("--")
+        self._评分值标签.setStyleSheet(f"color: {颜色.文字}; font-size: 14px; font-weight: bold;")
+        评分标题布局.addWidget(self._评分值标签)
+        评分标题布局.addStretch()
+        
+        评分布局.addWidget(评分标题行)
+        
+        # 价值评分进度条
+        self._评分进度条 = QProgressBar()
+        self._评分进度条.setRange(0, 100)
+        self._评分进度条.setValue(0)
+        self._评分进度条.setFixedHeight(8)
+        self._评分进度条.setTextVisible(False)
+        self._评分进度条.setStyleSheet(f"""
+            QProgressBar {{
+                border: none;
+                border-radius: 4px;
+                background-color: {颜色.边框};
+            }}
+            QProgressBar::chunk {{
+                border-radius: 4px;
+                background-color: {颜色.成功};
+            }}
+        """)
+        评分布局.addWidget(self._评分进度条)
+        
+        # 价值等级标签
+        self._价值等级标签 = QLabel("等级: --")
+        self._价值等级标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        评分布局.addWidget(self._价值等级标签)
+        
+        布局.addWidget(评分容器)
+        
+        # 分隔线
+        分隔线 = QFrame()
+        分隔线.setFrameShape(QFrame.HLine)
+        分隔线.setStyleSheet(f"background-color: {颜色.边框};")
+        分隔线.setFixedHeight(1)
+        布局.addWidget(分隔线)
+        
+        # 片段统计
+        统计容器 = QWidget()
+        统计布局 = QGridLayout(统计容器)
+        统计布局.setContentsMargins(0, 0, 0, 0)
+        统计布局.setSpacing(6)
+        
+        # 高价值片段
+        高价值标签 = QLabel("🟢 高价值:")
+        高价值标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        统计布局.addWidget(高价值标签, 0, 0)
+        
+        self._高价值数量 = QLabel("0")
+        self._高价值数量.setStyleSheet(f"color: {颜色.成功}; font-size: 12px; font-weight: 500;")
+        统计布局.addWidget(self._高价值数量, 0, 1)
+        
+        # 中价值片段
+        中价值标签 = QLabel("🟡 中价值:")
+        中价值标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        统计布局.addWidget(中价值标签, 0, 2)
+        
+        self._中价值数量 = QLabel("0")
+        self._中价值数量.setStyleSheet(f"color: {颜色.警告}; font-size: 12px; font-weight: 500;")
+        统计布局.addWidget(self._中价值数量, 0, 3)
+        
+        # 低价值片段
+        低价值标签 = QLabel("🔴 低价值:")
+        低价值标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        统计布局.addWidget(低价值标签, 1, 0)
+        
+        self._低价值数量 = QLabel("0")
+        self._低价值数量.setStyleSheet(f"color: {颜色.错误}; font-size: 12px; font-weight: 500;")
+        统计布局.addWidget(self._低价值数量, 1, 1)
+        
+        # 总片段数
+        总数标签 = QLabel("📊 总计:")
+        总数标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        统计布局.addWidget(总数标签, 1, 2)
+        
+        self._总片段数量 = QLabel("0")
+        self._总片段数量.setStyleSheet(f"color: {颜色.文字}; font-size: 12px; font-weight: 500;")
+        统计布局.addWidget(self._总片段数量, 1, 3)
+        
+        布局.addWidget(统计容器)
+        
+        # 分隔线
+        分隔线2 = QFrame()
+        分隔线2.setFrameShape(QFrame.HLine)
+        分隔线2.setStyleSheet(f"background-color: {颜色.边框};")
+        分隔线2.setFixedHeight(1)
+        布局.addWidget(分隔线2)
+        
+        # 过滤选项 (需求 2.6)
+        过滤容器 = QWidget()
+        过滤布局 = QVBoxLayout(过滤容器)
+        过滤布局.setContentsMargins(0, 0, 0, 0)
+        过滤布局.setSpacing(6)
+        
+        过滤标签 = QLabel("保存选项:")
+        过滤标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px;")
+        过滤布局.addWidget(过滤标签)
+        
+        self._过滤选择 = QComboBox()
+        self._过滤选择.addItems(["保留全部", "仅保留高价值", "自动过滤低价值"])
+        self._过滤选择.setFixedHeight(28)
+        self._过滤选择.setStyleSheet(f"""
+            QComboBox {{
+                padding: 4px 8px;
+                font-size: 12px;
+            }}
+        """)
+        self._过滤选择.currentTextChanged.connect(self.过滤选项改变.emit)
+        过滤布局.addWidget(self._过滤选择)
+        
+        布局.addWidget(过滤容器)
+    
+    def 更新价值评分(self, 评分: float) -> None:
+        """更新实时价值评分显示
+        
+        需求 3.1: 实时显示当前片段的Value_Score
+        
+        Args:
+            评分: 价值评分 (0-100)
+        """
+        # 更新评分值
+        self._评分值标签.setText(f"{评分:.1f}")
+        self._评分进度条.setValue(int(评分))
+        
+        # 根据评分设置颜色和等级
+        if 评分 >= 70:
+            等级 = "高价值"
+            颜色值 = 颜色.成功
+        elif 评分 >= 40:
+            等级 = "中价值"
+            颜色值 = 颜色.警告
+        else:
+            等级 = "低价值"
+            颜色值 = 颜色.错误
+        
+        self._评分值标签.setStyleSheet(f"color: {颜色值}; font-size: 14px; font-weight: bold;")
+        self._价值等级标签.setText(f"等级: {等级}")
+        self._价值等级标签.setStyleSheet(f"color: {颜色值}; font-size: 11px;")
+        
+        # 更新进度条颜色
+        self._评分进度条.setStyleSheet(f"""
+            QProgressBar {{
+                border: none;
+                border-radius: 4px;
+                background-color: {颜色.边框};
+            }}
+            QProgressBar::chunk {{
+                border-radius: 4px;
+                background-color: {颜色值};
+            }}
+        """)
+    
+    def 更新片段统计(self, 高价值: int, 中价值: int, 低价值: int) -> None:
+        """更新片段统计显示
+        
+        需求 3.2: 显示本次录制的高/中/低价值片段数量统计
+        
+        Args:
+            高价值: 高价值片段数量
+            中价值: 中价值片段数量
+            低价值: 低价值片段数量
+        """
+        self._高价值数量.setText(str(高价值))
+        self._中价值数量.setText(str(中价值))
+        self._低价值数量.setText(str(低价值))
+        self._总片段数量.setText(str(高价值 + 中价值 + 低价值))
+    
+    def 获取过滤选项(self) -> str:
+        """获取当前选择的过滤选项
+        
+        Returns:
+            过滤选项文本
+        """
+        return self._过滤选择.currentText()
+    
+    def 重置(self) -> None:
+        """重置所有显示"""
+        self._评分值标签.setText("--")
+        self._评分值标签.setStyleSheet(f"color: {颜色.文字}; font-size: 14px; font-weight: bold;")
+        self._评分进度条.setValue(0)
+        self._评分进度条.setStyleSheet(f"""
+            QProgressBar {{
+                border: none;
+                border-radius: 4px;
+                background-color: {颜色.边框};
+            }}
+            QProgressBar::chunk {{
+                border-radius: 4px;
+                background-color: {颜色.成功};
+            }}
+        """)
+        self._价值等级标签.setText("等级: --")
+        self._价值等级标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        self._高价值数量.setText("0")
+        self._中价值数量.setText("0")
+        self._低价值数量.setText("0")
+        self._总片段数量.setText("0")
+
+
 
 class 数据收集页(QWidget):
     """
     数据收集页面
     
-    提供数据收集功能的完整界面，包括控制面板、状态监控和游戏画面预览。
+    提供数据收集功能的完整界面，包括控制面板、状态监控、游戏画面预览和智能录制控制。
     """
     
     # 信号定义
@@ -390,7 +644,7 @@ class 数据收集页(QWidget):
         """初始化界面布局"""
         主布局 = QVBoxLayout(self)
         主布局.setContentsMargins(24, 24, 24, 24)
-        主布局.setSpacing(20)
+        主布局.setSpacing(16)
         
         # 页面标题
         标题 = QLabel("🎥 数据收集")
@@ -405,13 +659,13 @@ class 数据收集页(QWidget):
         内容容器 = QWidget()
         内容布局 = QHBoxLayout(内容容器)
         内容布局.setContentsMargins(0, 0, 0, 0)
-        内容布局.setSpacing(20)
+        内容布局.setSpacing(16)
         
         # 左侧: 控制面板和状态监控
         左侧容器 = QWidget()
         左侧布局 = QVBoxLayout(左侧容器)
         左侧布局.setContentsMargins(0, 0, 0, 0)
-        左侧布局.setSpacing(16)
+        左侧布局.setSpacing(12)
         
         # 控制面板
         self._控制面板 = 控制面板()
@@ -426,6 +680,11 @@ class 数据收集页(QWidget):
         
         左侧布局.addStretch()
         内容布局.addWidget(左侧容器, 1)
+        
+        # 中间: 智能录制面板
+        self._智能录制面板 = 智能录制面板()
+        self._智能录制面板.setFixedWidth(200)
+        内容布局.addWidget(self._智能录制面板)
         
         # 右侧: 游戏画面预览
         self._画面预览 = 画面预览()
@@ -452,7 +711,8 @@ class 数据收集页(QWidget):
         
         说明内容 = QLabel(
             "1. 选择训练模式 → 2. 点击开始录制 → 3. 切换到游戏窗口 → "
-            "4. 进行游戏操作 → 5. 按T暂停/继续，ESC停止"
+            "4. 进行游戏操作 → 5. 按T暂停/继续，ESC停止 | "
+            "💡 智能录制会自动评估片段价值，可选择保存策略"
         )
         说明内容.setStyleSheet(f"color: {颜色.文字}; font-size: 12px;")
         说明内容.setWordWrap(True)
@@ -519,6 +779,7 @@ class 数据收集页(QWidget):
         self._控制面板.设置录制状态(False, False)
         self._状态监控.更新录制状态("已停止")
         self._画面预览.清除预览()
+        self._智能录制面板.重置()
         
         self.停止录制.emit()
     
@@ -534,6 +795,10 @@ class 数据收集页(QWidget):
                 - 帧率: float
                 - 当前动作: str
                 - 帧图像: np.ndarray (可选)
+                - 价值评分: float (可选) - 智能录制价值评分
+                - 高价值片段: int (可选) - 高价值片段数量
+                - 中价值片段: int (可选) - 中价值片段数量
+                - 低价值片段: int (可选) - 低价值片段数量
         """
         if "样本数量" in 状态数据:
             self._状态监控.更新样本数量(状态数据["样本数量"])
@@ -549,6 +814,17 @@ class 数据收集页(QWidget):
         
         if "帧图像" in 状态数据 and 状态数据["帧图像"] is not None:
             self._画面预览.更新预览(状态数据["帧图像"])
+        
+        # 智能录制相关状态更新
+        if "价值评分" in 状态数据:
+            self._智能录制面板.更新价值评分(状态数据["价值评分"])
+        
+        if all(key in 状态数据 for key in ["高价值片段", "中价值片段", "低价值片段"]):
+            self._智能录制面板.更新片段统计(
+                状态数据["高价值片段"],
+                状态数据["中价值片段"],
+                状态数据["低价值片段"]
+            )
     
     def 显示文件保存通知(self, 文件路径: str, 样本数: int) -> None:
         """显示文件保存通知"""
@@ -572,3 +848,15 @@ class 数据收集页(QWidget):
     def 是否已暂停(self) -> bool:
         """返回是否已暂停"""
         return self._已暂停
+    
+    def 获取智能录制面板(self) -> 智能录制面板:
+        """获取智能录制面板组件"""
+        return self._智能录制面板
+    
+    def 获取过滤选项(self) -> str:
+        """获取当前选择的过滤选项
+        
+        Returns:
+            过滤选项文本: "保留全部", "仅保留高价值", "自动过滤低价值"
+        """
+        return self._智能录制面板.获取过滤选项()

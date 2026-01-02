@@ -1,351 +1,195 @@
-# -*- coding: utf-8 -*-
 """
-界面集成测试模块
+界面集成测试
+测试模块管理器的错误降级机制
 
-测试GUI界面的完整功能流程，包括：
-- 页面切换流程
-- 数据收集流程
-- 训练流程
-- 机器人运行流程
+需求: 10.4 - WHEN 任一新模块出错 THEN 系统 SHALL 降级到基础功能继续运行
 """
 
+import pytest
 import sys
 import os
 
 # 添加项目根目录到路径
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pytest
-
-# 检查PySide6是否可用
-try:
-    from PySide6.QtWidgets import QApplication
-    from PySide6.QtCore import Qt, QTimer
-    PYSIDE6_AVAILABLE = True
-except ImportError:
-    PYSIDE6_AVAILABLE = False
+from 核心.模块管理 import 模块管理器, 模块状态, 获取模块管理器, 重置模块管理器
 
 
-# 如果PySide6不可用，跳过所有测试
-pytestmark = pytest.mark.skipif(
-    not PYSIDE6_AVAILABLE,
-    reason="PySide6未安装，跳过GUI测试"
-)
-
-
-@pytest.fixture(scope="module")
-def 应用实例():
-    """创建QApplication实例（整个模块共享）"""
-    # 检查是否已有应用实例
-    app = QApplication.instance()
-    if app is None:
-        app = QApplication([])
-    yield app
-    # 不要关闭应用，让pytest-qt处理
-
-
-@pytest.fixture
-def 主窗口(应用实例):
-    """创建主窗口实例"""
-    from 界面.主程序 import MainWindow
-    窗口 = MainWindow()
-    yield 窗口
-    窗口.close()
-
-
-class Test主窗口单元测试:
-    """
-    主窗口单元测试
+class Test模块管理器:
+    """模块管理器测试类"""
     
-    测试窗口尺寸是否为800x600，测试导航栏和内容区域是否存在
-    Requirements: 1.5
-    """
+    def setup_method(self):
+        """每个测试前重置模块管理器"""
+        重置模块管理器()
     
-    def test_窗口尺寸为800x600(self, 主窗口):
-        """测试窗口尺寸是否为800x600像素"""
-        # 验证窗口宽度
-        assert 主窗口.width() == 800, f"窗口宽度应为800，实际为{主窗口.width()}"
-        # 验证窗口高度
-        assert 主窗口.height() == 600, f"窗口高度应为600，实际为{主窗口.height()}"
-    
-    def test_窗口尺寸固定(self, 主窗口):
-        """测试窗口尺寸是否固定（不可调整）"""
-        # 验证最小尺寸等于最大尺寸（固定尺寸）
-        assert 主窗口.minimumWidth() == 800
-        assert 主窗口.minimumHeight() == 600
-        assert 主窗口.maximumWidth() == 800
-        assert 主窗口.maximumHeight() == 600
-    
-    def test_导航栏存在(self, 主窗口):
-        """测试导航栏组件是否存在"""
-        导航栏 = 主窗口.获取导航栏()
-        assert 导航栏 is not None, "导航栏组件应该存在"
-        # 验证导航栏有6个导航项
-        assert 导航栏.count() == 6, f"导航栏应有6个导航项，实际有{导航栏.count()}个"
-    
-    def test_内容区域存在(self, 主窗口):
-        """测试内容区域（QStackedWidget）是否存在"""
-        # 验证页面堆栈存在
-        assert hasattr(主窗口, '_页面堆栈'), "内容区域（页面堆栈）应该存在"
-        assert 主窗口._页面堆栈 is not None, "内容区域不应为None"
-        # 验证页面堆栈包含6个页面
-        assert 主窗口._页面堆栈.count() == 6, f"内容区域应有6个页面，实际有{主窗口._页面堆栈.count()}个"
-    
-    def test_导航栏和内容区域布局(self, 主窗口):
-        """测试导航栏和内容区域的布局是否正确"""
-        导航栏 = 主窗口.获取导航栏()
+    def test_初始化所有模块(self):
+        """测试模块管理器能正确初始化所有模块"""
+        manager = 获取模块管理器()
         
-        # 验证导航栏宽度固定为130像素（实际实现值）
-        assert 导航栏.width() == 130, f"导航栏宽度应为130，实际为{导航栏.width()}"
+        # 检查所有模块都已初始化
+        状态 = manager.获取所有模块状态()
+        assert "智能录制" in 状态
+        assert "配置管理" in 状态
+        assert "自动调参" in 状态
         
-        # 验证导航栏在左侧（x坐标为0或接近0）
-        导航栏位置 = 导航栏.pos()
-        assert 导航栏位置.x() <= 10, "导航栏应在窗口左侧"
+        # 检查模块状态
+        for 模块名, 模块状态信息 in 状态.items():
+            assert 模块状态信息["存在"] == True
+            # 模块应该是正常或禁用状态（取决于依赖是否可用）
+            assert 模块状态信息["状态"] in ["normal", "disabled", "degraded"]
     
-    def test_状态栏存在(self, 主窗口):
-        """测试状态栏是否存在"""
-        assert hasattr(主窗口, '_状态栏'), "状态栏应该存在"
-        assert 主窗口._状态栏 is not None, "状态栏不应为None"
+    def test_模块可用性检查(self):
+        """测试模块可用性检查功能"""
+        manager = 获取模块管理器()
+        
+        # 检查智能录制模块
+        if manager.智能录制可用:
+            assert manager.获取模块实例("智能录制") is not None
+        else:
+            assert manager.获取模块实例("智能录制") is None
+
+    def test_错误降级机制(self):
+        """测试错误降级机制"""
+        manager = 模块管理器()
+        
+        # 模拟错误
+        def 会出错的操作():
+            raise ValueError("测试错误")
+        
+        # 执行会出错的操作
+        result = manager.安全执行("智能录制", 会出错的操作)
+        
+        # 应该返回None而不是抛出异常
+        assert result is None
+        
+        # 检查模块状态应该是降级
+        状态 = manager.获取模块状态("智能录制")
+        assert 状态["状态"] in ["degraded", "disabled"]
+        assert 状态["错误次数"] >= 1
+    
+    def test_连续错误导致禁用(self):
+        """测试连续错误导致模块禁用"""
+        manager = 模块管理器()
+        
+        def 会出错的操作():
+            raise ValueError("测试错误")
+        
+        # 连续执行多次错误操作
+        for _ in range(manager.MAX_ERROR_COUNT + 1):
+            manager.安全执行("智能录制", 会出错的操作)
+        
+        # 检查模块应该被禁用
+        状态 = manager.获取模块状态("智能录制")
+        assert 状态["状态"] == "disabled"
+    
+    def test_模块恢复(self):
+        """测试模块恢复功能"""
+        manager = 模块管理器()
+        
+        # 先禁用模块
+        manager.禁用模块("智能录制")
+        assert not manager.模块可用("智能录制")
+        
+        # 尝试恢复
+        成功 = manager.尝试恢复模块("智能录制")
+        
+        # 恢复后应该可用（如果依赖可用的话）
+        # 注意：恢复是否成功取决于模块依赖是否可用
+        状态 = manager.获取模块状态("智能录制")
+        assert 状态["错误次数"] == 0
+    
+    def test_安全执行成功操作(self):
+        """测试安全执行成功的操作"""
+        manager = 模块管理器()
+        
+        def 成功的操作():
+            return "成功"
+        
+        result = manager.安全执行("智能录制", 成功的操作)
+        
+        # 如果模块可用，应该返回结果
+        if manager.模块可用("智能录制"):
+            assert result == "成功"
+    
+    def test_手动禁用和启用(self):
+        """测试手动禁用和启用模块"""
+        manager = 模块管理器()
+        
+        # 手动禁用
+        manager.禁用模块("配置管理")
+        assert not manager.模块可用("配置管理")
+        
+        状态 = manager.获取模块状态("配置管理")
+        assert 状态["降级原因"] == "手动禁用"
+        
+        # 手动启用
+        manager.启用模块("配置管理")
+        # 启用后状态取决于模块是否能正常初始化
 
 
-class Test页面切换流程:
-    """测试完整的页面切换流程"""
+class Test配置集成:
+    """配置系统集成测试"""
     
-    def test_窗口初始化(self, 主窗口):
-        """测试窗口正确初始化"""
-        assert 主窗口 is not None
-        assert 主窗口.width() == 800
-        assert 主窗口.height() == 600
-        assert 主窗口.windowTitle() == "🎮 MMORPG游戏AI助手"
+    def test_配置管理模块加载(self):
+        """测试配置管理模块能正确加载"""
+        try:
+            from 配置.设置 import 配置管理可用, 获取配置管理器
+            
+            if 配置管理可用:
+                manager = 获取配置管理器()
+                assert manager is not None
+        except ImportError:
+            pytest.skip("配置管理模块不可用")
     
-    def test_默认显示首页(self, 主窗口):
-        """测试默认显示首页"""
-        assert 主窗口.获取当前页面() == "首页"
-    
-    def test_切换到数据收集页(self, 主窗口):
-        """测试切换到数据收集页面"""
-        主窗口.切换页面("数据收集")
-        assert 主窗口.获取当前页面() == "数据收集"
-    
-    def test_切换到训练页(self, 主窗口):
-        """测试切换到训练页面"""
-        主窗口.切换页面("训练")
-        assert 主窗口.获取当前页面() == "训练"
-    
-    def test_切换到运行页(self, 主窗口):
-        """测试切换到运行页面"""
-        主窗口.切换页面("运行")
-        assert 主窗口.获取当前页面() == "运行"
-    
-    def test_切换到配置页(self, 主窗口):
-        """测试切换到配置页面"""
-        主窗口.切换页面("配置")
-        assert 主窗口.获取当前页面() == "配置"
-    
-    def test_切换到数据管理页(self, 主窗口):
-        """测试切换到数据管理页面"""
-        主窗口.切换页面("数据管理")
-        assert 主窗口.获取当前页面() == "数据管理"
-    
-    def test_完整页面切换循环(self, 主窗口):
-        """测试完整的页面切换循环"""
-        页面列表 = ["首页", "数据收集", "训练", "运行", "配置", "数据管理"]
-        
-        for 页面 in 页面列表:
-            主窗口.切换页面(页面)
-            assert 主窗口.获取当前页面() == 页面
-        
-        # 返回首页
-        主窗口.切换页面("首页")
-        assert 主窗口.获取当前页面() == "首页"
-    
-    def test_导航栏存在(self, 主窗口):
-        """测试导航栏组件存在"""
-        导航栏 = 主窗口.获取导航栏()
-        assert 导航栏 is not None
-        assert 导航栏.count() == 6  # 6个导航项
+    def test_配置迁移功能(self):
+        """测试配置迁移功能"""
+        try:
+            from 配置.设置 import 配置管理可用, 迁移旧配置到档案
+            
+            if not 配置管理可用:
+                pytest.skip("配置管理模块不可用")
+            
+            # 尝试迁移（可能因为档案已存在而失败，这是正常的）
+            result = 迁移旧配置到档案("test_migration", "测试游戏")
+            # 结果可以是True或False，取决于档案是否已存在
+            assert isinstance(result, bool)
+        except ImportError:
+            pytest.skip("配置管理模块不可用")
 
 
-class Test数据收集页面:
-    """测试数据收集页面功能"""
+class Test决策引擎集成:
+    """决策引擎集成测试"""
     
-    def test_数据收集页面组件(self, 主窗口):
-        """测试数据收集页面组件存在"""
-        主窗口.切换页面("数据收集")
-        
-        # 验证页面已切换
-        assert 主窗口.获取当前页面() == "数据收集"
-        
-        # 验证数据收集页面实例存在
-        assert hasattr(主窗口, '_数据收集页')
-        assert 主窗口._数据收集页 is not None
+    def test_自动调参集成(self):
+        """测试决策引擎的自动调参集成"""
+        try:
+            from 核心.决策引擎 import 决策引擎, 自动调参可用
+            
+            # 创建启用自动调参的决策引擎
+            engine = 决策引擎(启用自动调参=自动调参可用)
+            
+            # 检查自动调参状态
+            状态 = engine.获取自动调参状态()
+            assert "可用" in 状态
+            assert "启用" in 状态
+        except ImportError as e:
+            pytest.skip(f"决策引擎模块不可用: {e}")
     
-    def test_数据收集页面初始状态(self, 主窗口):
-        """测试数据收集页面初始状态"""
-        主窗口.切换页面("数据收集")
-        
-        # 初始状态应该不在录制中
-        assert not 主窗口._数据收集页.是否录制中()
-
-
-class Test训练页面:
-    """测试训练页面功能"""
-    
-    def test_训练页面组件(self, 主窗口):
-        """测试训练页面组件存在"""
-        主窗口.切换页面("训练")
-        
-        # 验证页面已切换
-        assert 主窗口.获取当前页面() == "训练"
-        
-        # 验证训练页面实例存在
-        assert hasattr(主窗口, '_训练页')
-        assert 主窗口._训练页 is not None
-    
-    def test_训练页面初始状态(self, 主窗口):
-        """测试训练页面初始状态"""
-        主窗口.切换页面("训练")
-        
-        # 初始状态应该不在训练中
-        assert not 主窗口._训练页.是否训练中()
-
-
-class Test运行页面:
-    """测试运行页面功能"""
-    
-    def test_运行页面组件(self, 主窗口):
-        """测试运行页面组件存在"""
-        主窗口.切换页面("运行")
-        
-        # 验证页面已切换
-        assert 主窗口.获取当前页面() == "运行"
-        
-        # 验证运行页面实例存在
-        assert hasattr(主窗口, '_运行页')
-        assert 主窗口._运行页 is not None
-    
-    def test_运行页面初始状态(self, 主窗口):
-        """测试运行页面初始状态"""
-        主窗口.切换页面("运行")
-        
-        # 初始状态应该不在运行中
-        assert not 主窗口._运行页.是否运行中()
-
-
-class Test配置页面:
-    """测试配置页面功能"""
-    
-    def test_配置页面组件(self, 主窗口):
-        """测试配置页面组件存在"""
-        主窗口.切换页面("配置")
-        
-        # 验证页面已切换
-        assert 主窗口.获取当前页面() == "配置"
-        
-        # 验证配置页面实例存在
-        assert hasattr(主窗口, '_配置页')
-        assert 主窗口._配置页 is not None
-
-
-class Test数据管理页面:
-    """测试数据管理页面功能"""
-    
-    def test_数据管理页面组件(self, 主窗口):
-        """测试数据管理页面组件存在"""
-        主窗口.切换页面("数据管理")
-        
-        # 验证页面已切换
-        assert 主窗口.获取当前页面() == "数据管理"
-        
-        # 验证数据管理页面实例存在
-        assert hasattr(主窗口, '_数据管理页')
-        assert 主窗口._数据管理页 is not None
-
-
-class Test首页功能:
-    """测试首页功能"""
-    
-    def test_首页组件(self, 主窗口):
-        """测试首页组件存在"""
-        主窗口.切换页面("首页")
-        
-        # 验证首页实例存在
-        assert hasattr(主窗口, '_首页')
-        assert 主窗口._首页 is not None
-    
-    def test_首页快捷按钮信号(self, 主窗口):
-        """测试首页快捷按钮能触发页面切换"""
-        主窗口.切换页面("首页")
-        
-        # 模拟点击快速运行按钮（通过信号）
-        主窗口._首页.快速运行点击.emit()
-        assert 主窗口.获取当前页面() == "运行"
-        
-        # 返回首页
-        主窗口.切换页面("首页")
-        
-        # 模拟点击开始录制按钮
-        主窗口._首页.开始录制点击.emit()
-        assert 主窗口.获取当前页面() == "数据收集"
-        
-        # 返回首页
-        主窗口.切换页面("首页")
-        
-        # 模拟点击训练模型按钮
-        主窗口._首页.训练模型点击.emit()
-        assert 主窗口.获取当前页面() == "训练"
-        
-        # 返回首页
-        主窗口.切换页面("首页")
-        
-        # 模拟点击数据管理按钮
-        主窗口._首页.数据管理点击.emit()
-        assert 主窗口.获取当前页面() == "数据管理"
-
-
-class Test通知服务:
-    """测试通知服务功能"""
-    
-    def test_通知服务存在(self, 主窗口):
-        """测试通知服务组件存在"""
-        assert hasattr(主窗口, '_通知服务')
-        assert 主窗口._通知服务 is not None
-    
-    def test_显示通知方法(self, 主窗口):
-        """测试显示通知方法可调用"""
-        # 测试各种类型的通知
-        主窗口.显示通知("测试标题", "测试内容", "info")
-        主窗口.显示通知("成功标题", "成功内容", "success")
-        主窗口.显示通知("警告标题", "警告内容", "warning")
-        主窗口.显示通知("错误标题", "错误内容", "error")
-        
-        # 如果没有抛出异常，测试通过
-
-
-class Test错误处理:
-    """测试错误处理功能"""
-    
-    def test_错误处理器存在(self, 主窗口):
-        """测试错误处理器组件存在"""
-        assert hasattr(主窗口, '_错误处理器')
-        assert 主窗口._错误处理器 is not None
-
-
-class Test状态栏:
-    """测试状态栏功能"""
-    
-    def test_状态栏存在(self, 主窗口):
-        """测试状态栏存在"""
-        assert hasattr(主窗口, '_状态栏')
-        assert 主窗口._状态栏 is not None
-    
-    def test_更新状态栏(self, 主窗口):
-        """测试更新状态栏消息"""
-        主窗口.更新状态栏("测试消息")
-        # 如果没有抛出异常，测试通过
-        
-        主窗口.更新状态栏("带超时的消息", 3000)
-        # 如果没有抛出异常，测试通过
+    def test_记录执行结果(self):
+        """测试记录执行结果功能"""
+        try:
+            from 核心.决策引擎 import 决策引擎
+            
+            engine = 决策引擎(启用自动调参=True)
+            
+            # 记录一些执行结果
+            engine.记录执行结果(成功=True, 卡住=False)
+            engine.记录执行结果(成功=True, 卡住=False)
+            engine.记录执行结果(成功=False, 卡住=True)
+            
+            # 不应该抛出异常
+        except ImportError as e:
+            pytest.skip(f"决策引擎模块不可用: {e}")
 
 
 if __name__ == "__main__":

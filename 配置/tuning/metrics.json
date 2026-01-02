@@ -1,0 +1,107 @@
+[
+  {
+    "timestamp": "2026-01-02T14:55:35.532907",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T14:55:35.533412",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T14:55:35.533412",
+    "action_success_rate": 0.6666666666666666,
+    "state_accuracy": 0.8,
+    "stuck_count": 1,
+    "task_efficiency": 0.6933333333333334
+  },
+  {
+    "timestamp": "2026-01-02T15:14:55.987402",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T15:14:55.988399",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T15:14:55.990400",
+    "action_success_rate": 0.6666666666666666,
+    "state_accuracy": 0.8,
+    "stuck_count": 1,
+    "task_efficiency": 0.6933333333333334
+  },
+  {
+    "timestamp": "2026-01-02T15:17:59.421342",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T15:17:59.424339",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T15:17:59.424339",
+    "action_success_rate": 0.6666666666666666,
+    "state_accuracy": 0.8,
+    "stuck_count": 1,
+    "task_efficiency": 0.6933333333333334
+  },
+  {
+    "timestamp": "2026-01-02T15:22:21.512754",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T15:22:21.515759",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T15:22:21.516846",
+    "action_success_rate": 0.6666666666666666,
+    "state_accuracy": 0.8,
+    "stuck_count": 1,
+    "task_efficiency": 0.6933333333333334
+  },
+  {
+    "timestamp": "2026-01-02T15:27:57.572586",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T15:27:57.574587",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T15:27:57.575587",
+    "action_success_rate": 0.6666666666666666,
+    "state_accuracy": 0.8,
+    "stuck_count": 1,
+    "task_efficiency": 0.6933333333333334
+  }
+]

@@ -1,0 +1,4 @@
+# file: E:\BOT-MMORPG-AI-CN\核心\模块管理.py
+# hypothesis_version: 6.148.8
+
+[300.0, 'data_filter', 'degraded', 'disabled', 'error', 'normal', 'statistics_service', 'value_evaluator', '可用', '名称', '存在', '手动禁用', '智能录制', '智能录制模块初始化成功', '模块管理器初始化完成', '状态', '自动调参', '自动调参模块初始化成功', '配置管理', '配置管理模块初始化成功', '错误信息', '错误次数', '降级原因']

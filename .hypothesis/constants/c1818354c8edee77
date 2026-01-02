@@ -1,0 +1,4 @@
+# file: E:\BOT-MMORPG-AI-CN\核心\键盘控制.py
+# hypothesis_version: 6.148.8
+
+[0.02, 0.05, '3秒后按下W键1秒...', '__main__', 'dwExtraInfo', 'dwFlags', 'dx', 'dy', 'hi', 'ii', 'ki', 'mi', 'mouseData', 'time', 'type', 'uMsg', 'wParamH', 'wParamL', 'wScan', 'wVk', '测试完成!', '键盘控制模块测试']

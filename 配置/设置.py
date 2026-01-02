@@ -152,3 +152,183 @@ class 训练模式:
     "空格": 0x39, "Tab": 0x0F,
     "Shift": 0x2A, "Ctrl": 0x1D, "Alt": 0x38,
 }
+
+
+# ==================== 配置迁移功能 ====================
+def 迁移旧配置到档案(档案名称: str = "default", 游戏名称: str = "默认游戏"):
+    """将当前配置迁移到配置档案
+    
+    将现有的全局配置设置迁移到配置管理系统的档案中。
+    这允许用户将旧配置转换为新的档案格式。
+    
+    需求: 10.2 - 实现配置迁移逻辑
+    
+    Args:
+        档案名称: 新档案的名称
+        游戏名称: 游戏名称
+        
+    Returns:
+        bool: 迁移是否成功
+    """
+    if not 配置管理可用:
+        logger.warning("配置管理模块不可用，无法迁移配置")
+        return False
+    
+    try:
+        from 核心.配置管理 import (
+            GameProfile, WindowConfig, KeyMapping, 
+            UIRegions, DetectionParams, DecisionRules
+        )
+        
+        manager = 获取配置管理器()
+        if manager is None:
+            return False
+        
+        # 检查档案是否已存在
+        if manager.profile_exists(档案名称):
+            logger.warning(f"档案 '{档案名称}' 已存在，跳过迁移")
+            return False
+        
+        # 从当前全局配置创建档案
+        # 解析窗口区域
+        x, y, x2, y2 = 游戏窗口区域
+        width = x2 - x
+        height = y2 - y
+        
+        window_config = WindowConfig(x=x, y=y, width=width, height=height)
+        
+        # 从动作定义创建按键映射
+        move_keys = {}
+        skill_keys = {}
+        for action_id, action_info in 动作定义.items():
+            按键 = action_info.get("按键", "")
+            类型 = action_info.get("类型", "")
+            if 类型 == "移动" and 按键 in ["W", "A", "S", "D"]:
+                direction_map = {"W": "up", "S": "down", "A": "left", "D": "right"}
+                if 按键 in direction_map:
+                    move_keys[按键] = direction_map[按键]
+            elif 类型 == "技能" and 按键.isdigit():
+                skill_keys[按键] = f"skill{按键}"
+        
+        key_mapping = KeyMapping(
+            move_keys=move_keys if move_keys else {"W": "up", "S": "down", "A": "left", "D": "right"},
+            skill_keys=skill_keys if skill_keys else {"1": "skill1", "2": "skill2"},
+            interact_key="F"
+        )
+        
+        # 创建默认UI区域配置
+        ui_regions = UIRegions()
+        
+        # 创建检测参数配置
+        detection_params = DetectionParams(
+            yolo_model_path=预训练模型路径,
+            confidence_threshold=0.5
+        )
+        
+        # 创建决策规则配置
+        decision_rules = DecisionRules()
+        
+        # 创建配置档案
+        profile = GameProfile(
+            name=档案名称,
+            game_name=游戏名称,
+            window_config=window_config,
+            key_mapping=key_mapping,
+            ui_regions=ui_regions,
+            detection_params=detection_params,
+            decision_rules=decision_rules
+        )
+        
+        # 保存档案
+        manager.save_profile(profile)
+        logger.info(f"配置已迁移到档案: {档案名称}")
+        return True
+        
+    except Exception as e:
+        logger.error(f"配置迁移失败: {e}")
+        return False
+
+
+def 切换配置档案(档案名称: str) -> bool:
+    """切换到指定的配置档案
+    
+    切换配置档案后，全局配置变量会更新为新档案的值。
+    
+    Args:
+        档案名称: 要切换到的档案名称
+        
+    Returns:
+        bool: 切换是否成功
+    """
+    global 游戏窗口区域, 游戏宽度, 游戏高度
+    
+    if not 配置管理可用:
+        logger.warning("配置管理模块不可用")
+        return False
+    
+    try:
+        manager = 获取配置管理器()
+        if manager is None:
+            return False
+        
+        # 切换档案
+        manager.switch_profile(档案名称)
+        
+        # 重新加载配置
+        profile = manager.get_current_profile()
+        if profile:
+            window = profile.window_config
+            游戏窗口区域 = (window.x, window.y, 
+                          window.x + window.width, 
+                          window.y + window.height)
+            游戏宽度 = window.width
+            游戏高度 = window.height
+            
+            logger.info(f"已切换到配置档案: {档案名称}")
+            return True
+        
+        return False
+        
+    except Exception as e:
+        logger.error(f"切换配置档案失败: {e}")
+        return False
+
+
+def 获取所有配置档案() -> list:
+    """获取所有可用的配置档案名称
+    
+    Returns:
+        list: 档案名称列表
+    """
+    if not 配置管理可用:
+        return []
+    
+    try:
+        manager = 获取配置管理器()
+        if manager:
+            return manager.list_profiles()
+    except Exception as e:
+        logger.error(f"获取配置档案列表失败: {e}")
+    
+    return []
+
+
+def 获取当前配置档案名称() -> str:
+    """获取当前使用的配置档案名称
+    
+    Returns:
+        str: 当前档案名称，如果没有则返回空字符串
+    """
+    if not 配置管理可用:
+        return ""
+    
+    try:
+        manager = 获取配置管理器()
+        if manager:
+            profile = manager.get_current_profile()
+            if profile:
+                return profile.name
+    except Exception as e:
+        logger.error(f"获取当前配置档案失败: {e}")
+    
+    return ""

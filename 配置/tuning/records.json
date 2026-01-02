@@ -1,0 +1,62 @@
+[
+  {
+    "timestamp": "2026-01-02T15:14:55.989400",
+    "parameter_name": "action_cooldown",
+    "old_value": 0.5,
+    "new_value": 0.7,
+    "reason": "自动调参(平衡模式): 增加 0.2000",
+    "performance_before": {
+      "timestamp": "2026-01-02T15:14:55.989400",
+      "action_success_rate": 1.0,
+      "state_accuracy": 0.8,
+      "stuck_count": 0,
+      "task_efficiency": 0.9600000000000001
+    },
+    "performance_after": null
+  },
+  {
+    "timestamp": "2026-01-02T15:17:59.423340",
+    "parameter_name": "state_switch_threshold",
+    "old_value": 0.6,
+    "new_value": 0.7,
+    "reason": "自动调参(平衡模式): 增加 0.1000",
+    "performance_before": {
+      "timestamp": "2026-01-02T15:17:59.422341",
+      "action_success_rate": 0.9166666666666666,
+      "state_accuracy": 0.8,
+      "stuck_count": 1,
+      "task_efficiency": 0.8933333333333333
+    },
+    "performance_after": null
+  },
+  {
+    "timestamp": "2026-01-02T15:22:21.514772",
+    "parameter_name": "rule_priority_weight",
+    "old_value": 0.7,
+    "new_value": 0.8999999999999999,
+    "reason": "自动调参(平衡模式): 增加 0.2000",
+    "performance_before": {
+      "timestamp": "2026-01-02T15:22:21.513766",
+      "action_success_rate": 0.9166666666666666,
+      "state_accuracy": 0.8,
+      "stuck_count": 1,
+      "task_efficiency": 0.8933333333333333
+    },
+    "performance_after": null
+  },
+  {
+    "timestamp": "2026-01-02T15:27:57.574587",
+    "parameter_name": "detection_confidence_threshold",
+    "old_value": 0.5,
+    "new_value": 0.6,
+    "reason": "自动调参(平衡模式): 增加 0.1000",
+    "performance_before": {
+      "timestamp": "2026-01-02T15:27:57.573588",
+      "action_success_rate": 1.0,
+      "state_accuracy": 0.8,
+      "stuck_count": 0,
+      "task_efficiency": 0.9600000000000001
+    },
+    "performance_after": null
+  }
+]

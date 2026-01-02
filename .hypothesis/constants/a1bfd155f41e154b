@@ -1,0 +1,4 @@
+# file: E:\BOT-MMORPG-AI-CN\核心\数据类型.py
+# hypothesis_version: 6.148.8
+
+[0.0, 1.0, 'bottom_left', 'bottom_right', 'center', 'combat', 'dead', 'dialogue', 'down', 'gathering', 'idle', 'item', 'left', 'loading', 'looting', 'menu', 'mixed', 'model', 'model_first', 'monster', 'moving', 'npc', 'player', 'right', 'rule', 'rule_first', 'skill_effect', 'top_left', 'top_right', 'unknown', 'up', 'weighted_mix', '决策上下文']

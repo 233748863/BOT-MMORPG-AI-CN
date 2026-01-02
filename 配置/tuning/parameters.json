@@ -1,0 +1,38 @@
+{
+  "action_cooldown": {
+    "name": "action_cooldown",
+    "min_value": 0.1,
+    "max_value": 2.0,
+    "step": 0.1,
+    "current_value": 0.7,
+    "default_value": 0.5,
+    "locked": false
+  },
+  "state_switch_threshold": {
+    "name": "state_switch_threshold",
+    "min_value": 0.3,
+    "max_value": 0.9,
+    "step": 0.05,
+    "current_value": 0.7,
+    "default_value": 0.6,
+    "locked": false
+  },
+  "rule_priority_weight": {
+    "name": "rule_priority_weight",
+    "min_value": 0.0,
+    "max_value": 1.0,
+    "step": 0.1,
+    "current_value": 0.8999999999999999,
+    "default_value": 0.7,
+    "locked": false
+  },
+  "detection_confidence_threshold": {
+    "name": "detection_confidence_threshold",
+    "min_value": 0.3,
+    "max_value": 0.9,
+    "step": 0.05,
+    "current_value": 0.6,
+    "default_value": 0.5,
+    "locked": false
+  }
+}

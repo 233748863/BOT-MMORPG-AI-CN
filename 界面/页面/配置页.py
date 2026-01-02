@@ -8,13 +8,15 @@
 - 配置说明文字
 - 保存和重置功能
 - 实时验证输入有效性
+- 多游戏配置档案管理 (需求 6.1, 6.3, 6.5)
 """
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
     QFrame, QLabel, QPushButton, QLineEdit, QSpinBox,
     QDoubleSpinBox, QComboBox, QCheckBox, QSlider,
-    QGroupBox, QFormLayout, QMessageBox, QSizePolicy
+    QGroupBox, QFormLayout, QMessageBox, QSizePolicy,
+    QFileDialog, QInputDialog
 )
 from PySide6.QtCore import Qt, Signal
 from PySide6.QtGui import QIntValidator, QDoubleValidator
@@ -28,13 +30,25 @@ class 配置页(QWidget):
     # 信号定义
     配置已保存 = Signal()
     配置已重置 = Signal()
+    档案已切换 = Signal(str)  # 档案切换信号，参数为档案名称
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self._配置控件 = {}  # 存储所有配置控件的引用
         self._原始值 = {}    # 存储原始配置值用于重置
+        self._配置管理器 = None  # 配置管理器实例
+        self._初始化配置管理器()
         self._初始化界面()
         self._加载配置()
+    
+    def _初始化配置管理器(self):
+        """初始化配置管理器"""
+        try:
+            from 核心.配置管理 import ConfigManager
+            self._配置管理器 = ConfigManager(auto_load_last=True)
+        except Exception as e:
+            print(f"初始化配置管理器失败: {e}")
+            self._配置管理器 = None
     
     def _初始化界面(self):
         """初始化界面布局"""
@@ -66,6 +80,9 @@ class 配置页(QWidget):
         
         主布局.addLayout(标题布局)
         
+        # 档案管理区域 (需求 6.1, 6.3, 6.5)
+        主布局.addWidget(self._创建档案管理组())
+        
         # 滚动区域
         滚动区域 = QScrollArea()
         滚动区域.setWidgetResizable(True)
@@ -88,6 +105,316 @@ class 配置页(QWidget):
         
         滚动区域.setWidget(滚动内容)
         主布局.addWidget(滚动区域)
+    
+    def _创建档案管理组(self) -> QFrame:
+        """创建档案管理分组 (需求 6.1, 6.3, 6.5)"""
+        卡片 = QFrame()
+        卡片.setProperty("class", "card")
+        卡片.setStyleSheet(f"""
+            QFrame[class="card"] {{
+                background-color: {颜色.卡片背景};
+                border-radius: 12px;
+                border: 1px solid {颜色.边框};
+                padding: 12px;
+            }}
+        """)
+        
+        卡片布局 = QHBoxLayout(卡片)
+        卡片布局.setContentsMargins(16, 12, 16, 12)
+        卡片布局.setSpacing(12)
+        
+        # 档案图标和标签
+        档案标签 = QLabel("📁 配置档案:")
+        档案标签.setStyleSheet(f"font-size: 14px; font-weight: 500; color: {颜色.标题};")
+        卡片布局.addWidget(档案标签)
+        
+        # 档案选择下拉框 (需求 6.1)
+        self._档案选择 = QComboBox()
+        self._档案选择.setFixedWidth(180)
+        self._档案选择.setFixedHeight(32)
+        self._档案选择.setStyleSheet(f"""
+            QComboBox {{
+                padding-left: 10px;
+                font-size: 13px;
+            }}
+        """)
+        self._档案选择.currentTextChanged.connect(self._切换档案)
+        卡片布局.addWidget(self._档案选择)
+        
+        # 新建档案按钮
+        self._新建档案按钮 = QPushButton("➕ 新建")
+        self._新建档案按钮.setFixedSize(70, 32)
+        self._新建档案按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.成功};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: #059669;
+            }}
+        """)
+        self._新建档案按钮.clicked.connect(self._新建档案)
+        卡片布局.addWidget(self._新建档案按钮)
+        
+        # 导入按钮 (需求 6.5)
+        self._导入按钮 = QPushButton("📥 导入")
+        self._导入按钮.setFixedSize(70, 32)
+        self._导入按钮.setProperty("class", "secondary")
+        self._导入按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.卡片背景};
+                color: {颜色.文字};
+                border: 1px solid {颜色.边框};
+                border-radius: 6px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {颜色.悬停背景};
+            }}
+        """)
+        self._导入按钮.clicked.connect(self._导入档案)
+        卡片布局.addWidget(self._导入按钮)
+        
+        # 导出按钮 (需求 6.3)
+        self._导出按钮 = QPushButton("📤 导出")
+        self._导出按钮.setFixedSize(70, 32)
+        self._导出按钮.setProperty("class", "secondary")
+        self._导出按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.卡片背景};
+                color: {颜色.文字};
+                border: 1px solid {颜色.边框};
+                border-radius: 6px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {颜色.悬停背景};
+            }}
+        """)
+        self._导出按钮.clicked.connect(self._导出档案)
+        卡片布局.addWidget(self._导出按钮)
+        
+        # 删除按钮
+        self._删除档案按钮 = QPushButton("🗑️")
+        self._删除档案按钮.setFixedSize(32, 32)
+        self._删除档案按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.卡片背景};
+                color: {颜色.错误};
+                border: 1px solid {颜色.边框};
+                border-radius: 6px;
+                font-size: 14px;
+            }}
+            QPushButton:hover {{
+                background-color: #FEE2E2;
+                border-color: {颜色.错误};
+            }}
+        """)
+        self._删除档案按钮.clicked.connect(self._删除档案)
+        卡片布局.addWidget(self._删除档案按钮)
+        
+        卡片布局.addStretch()
+        
+        # 刷新档案列表
+        self._刷新档案列表()
+        
+        return 卡片
+    
+    def _刷新档案列表(self):
+        """刷新档案列表"""
+        if not self._配置管理器:
+            return
+        
+        # 保存当前选择
+        当前选择 = self._档案选择.currentText()
+        
+        # 阻止信号触发
+        self._档案选择.blockSignals(True)
+        
+        # 清空并重新加载
+        self._档案选择.clear()
+        档案列表 = self._配置管理器.list_profiles()
+        
+        if 档案列表:
+            self._档案选择.addItems(档案列表)
+            
+            # 恢复选择或选择当前档案
+            当前档案 = self._配置管理器.get_current_profile()
+            if 当前档案 and 当前档案.name in 档案列表:
+                self._档案选择.setCurrentText(当前档案.name)
+            elif 当前选择 in 档案列表:
+                self._档案选择.setCurrentText(当前选择)
+        else:
+            self._档案选择.addItem("(无档案)")
+        
+        # 恢复信号
+        self._档案选择.blockSignals(False)
+    
+    def _切换档案(self, 档案名称: str):
+        """切换配置档案 (需求 6.1)"""
+        if not self._配置管理器 or not 档案名称 or 档案名称 == "(无档案)":
+            return
+        
+        try:
+            self._配置管理器.switch_profile(档案名称)
+            self.档案已切换.emit(档案名称)
+            
+            # 显示切换成功提示
+            # 可以在状态栏显示，这里简单处理
+        except FileNotFoundError:
+            QMessageBox.warning(self, "切换失败", f"档案 '{档案名称}' 不存在")
+        except Exception as e:
+            QMessageBox.warning(self, "切换失败", f"切换档案时发生错误:\n{str(e)}")
+    
+    def _新建档案(self):
+        """新建配置档案"""
+        if not self._配置管理器:
+            QMessageBox.warning(self, "错误", "配置管理器未初始化")
+            return
+        
+        # 获取档案名称
+        档案名称, 确认 = QInputDialog.getText(
+            self, "新建档案", "请输入档案名称:",
+            QLineEdit.Normal, ""
+        )
+        
+        if not 确认 or not 档案名称.strip():
+            return
+        
+        # 获取游戏名称
+        游戏名称, 确认 = QInputDialog.getText(
+            self, "新建档案", "请输入游戏名称:",
+            QLineEdit.Normal, "未命名游戏"
+        )
+        
+        if not 确认:
+            return
+        
+        游戏名称 = 游戏名称.strip() or "未命名游戏"
+        
+        try:
+            # 创建新档案
+            新档案 = self._配置管理器.create_profile(档案名称.strip(), 游戏名称)
+            # 保存档案
+            self._配置管理器.save_profile(新档案)
+            # 刷新列表
+            self._刷新档案列表()
+            # 选择新档案
+            self._档案选择.setCurrentText(档案名称.strip())
+            
+            QMessageBox.information(self, "成功", f"档案 '{档案名称}' 创建成功！")
+        except FileExistsError:
+            QMessageBox.warning(self, "创建失败", f"档案 '{档案名称}' 已存在")
+        except Exception as e:
+            QMessageBox.warning(self, "创建失败", f"创建档案时发生错误:\n{str(e)}")
+    
+    def _导入档案(self):
+        """导入配置档案 (需求 6.5)"""
+        if not self._配置管理器:
+            QMessageBox.warning(self, "错误", "配置管理器未初始化")
+            return
+        
+        # 选择文件
+        文件路径, _ = QFileDialog.getOpenFileName(
+            self, "导入配置档案", "",
+            "JSON文件 (*.json);;所有文件 (*.*)"
+        )
+        
+        if not 文件路径:
+            return
+        
+        # 询问是否使用新名称
+        新名称, 确认 = QInputDialog.getText(
+            self, "导入档案", 
+            "请输入导入后的档案名称 (留空使用原名称):",
+            QLineEdit.Normal, ""
+        )
+        
+        if not 确认:
+            return
+        
+        try:
+            # 导入档案
+            导入的档案 = self._配置管理器.import_profile(
+                文件路径, 
+                新名称.strip() if 新名称.strip() else None
+            )
+            # 保存档案
+            self._配置管理器.save_profile(导入的档案)
+            # 刷新列表
+            self._刷新档案列表()
+            # 选择导入的档案
+            self._档案选择.setCurrentText(导入的档案.name)
+            
+            QMessageBox.information(self, "成功", f"档案 '{导入的档案.name}' 导入成功！")
+        except FileExistsError:
+            QMessageBox.warning(self, "导入失败", "同名档案已存在，请使用其他名称")
+        except ValueError as e:
+            QMessageBox.warning(self, "导入失败", f"文件格式无效:\n{str(e)}")
+        except Exception as e:
+            QMessageBox.warning(self, "导入失败", f"导入档案时发生错误:\n{str(e)}")
+    
+    def _导出档案(self):
+        """导出配置档案 (需求 6.3)"""
+        if not self._配置管理器:
+            QMessageBox.warning(self, "错误", "配置管理器未初始化")
+            return
+        
+        当前档案名 = self._档案选择.currentText()
+        if not 当前档案名 or 当前档案名 == "(无档案)":
+            QMessageBox.warning(self, "导出失败", "请先选择要导出的档案")
+            return
+        
+        # 选择保存路径
+        文件路径, _ = QFileDialog.getSaveFileName(
+            self, "导出配置档案", f"{当前档案名}.json",
+            "JSON文件 (*.json);;所有文件 (*.*)"
+        )
+        
+        if not 文件路径:
+            return
+        
+        try:
+            self._配置管理器.export_profile(当前档案名, 文件路径)
+            QMessageBox.information(self, "成功", f"档案已导出到:\n{文件路径}")
+        except FileNotFoundError:
+            QMessageBox.warning(self, "导出失败", f"档案 '{当前档案名}' 不存在")
+        except Exception as e:
+            QMessageBox.warning(self, "导出失败", f"导出档案时发生错误:\n{str(e)}")
+    
+    def _删除档案(self):
+        """删除配置档案"""
+        if not self._配置管理器:
+            QMessageBox.warning(self, "错误", "配置管理器未初始化")
+            return
+        
+        当前档案名 = self._档案选择.currentText()
+        if not 当前档案名 or 当前档案名 == "(无档案)":
+            QMessageBox.warning(self, "删除失败", "请先选择要删除的档案")
+            return
+        
+        # 确认删除
+        回复 = QMessageBox.question(
+            self, "确认删除",
+            f"确定要删除档案 '{当前档案名}' 吗？\n此操作不可撤销！",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if 回复 != QMessageBox.Yes:
+            return
+        
+        try:
+            self._配置管理器.delete_profile(当前档案名)
+            self._刷新档案列表()
+            QMessageBox.information(self, "成功", f"档案 '{当前档案名}' 已删除")
+        except FileNotFoundError:
+            QMessageBox.warning(self, "删除失败", f"档案 '{当前档案名}' 不存在")
+        except Exception as e:
+            QMessageBox.warning(self, "删除失败", f"删除档案时发生错误:\n{str(e)}")
     
     def _创建配置卡片(self, 标题文字: str) -> tuple:
         """创建配置分组卡片，返回(卡片, 内容布局)"""

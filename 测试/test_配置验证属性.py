@@ -18,7 +18,7 @@ import os
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pytest
-from hypothesis import given, strategies as st, settings, assume
+from hypothesis import given, strategies as st, settings, assume, HealthCheck
 
 # 检查PySide6是否可用
 try:
@@ -214,18 +214,22 @@ class Test配置验证属性测试:
             页面.close()
     
     @given(
-        模型高度=st.integers(min_value=300, max_value=540),
-        游戏高度=st.integers(min_value=480, max_value=540),
+        游戏高度=st.integers(min_value=480, max_value=539),
+        高度差=st.integers(min_value=1, max_value=60),
     )
     @settings(max_examples=100, deadline=None)
-    def test_模型输入高度大于游戏高度_应失败(self, 应用实例, 模型高度, 游戏高度):
+    def test_模型输入高度大于游戏高度_应失败(self, 应用实例, 游戏高度, 高度差):
         """
         属性测试: 当模型输入高度大于游戏高度时，验证应失败
         
         **Feature: modern-ui, Property 7: 配置验证逻辑**
         **Validates: Requirements 5.7**
+        
+        注意: 游戏高度控件范围是480-2160，模型输入高度控件范围是68-540
+        所以我们需要确保游戏高度在480-539之间，模型高度在481-540之间
         """
-        assume(模型高度 > 游戏高度)
+        模型高度 = min(游戏高度 + 高度差, 540)  # 确保模型高度不超过控件最大值540
+        assume(模型高度 > 游戏高度)  # 确保模型高度确实大于游戏高度
         
         from 界面.页面.配置页 import 配置页
         页面 = 配置页()
