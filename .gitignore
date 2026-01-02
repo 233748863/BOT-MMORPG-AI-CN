@@ -39,6 +39,8 @@ env/
 htmlcov/
 .tox/
 .nox/
+.hypothesis/
+.kiro/
 
 # 日志
 *.log
