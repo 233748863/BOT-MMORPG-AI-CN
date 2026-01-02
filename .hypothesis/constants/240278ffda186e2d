@@ -1,0 +1,4 @@
+# file: E:\BOT-MMORPG-AI-CN\界面\组件\通知服务.py
+# hypothesis_version: 6.148.8
+
+[b'opacity', 0.0, 1.0, 300, 320, 500, 5000, 8000, '#065F46', '#10B981', '#1E40AF', '#3B82F6', '#92400E', '#991B1B', '#ECFDF5', '#EF4444', '#EFF6FF', '#F59E0B', '#FEF2F2', '#FFFBEB', '%H:%M:%S', 'Consolas', 'Segoe UI Emoji', 'error', 'info', 'success', 'warning', '×', 'ℹ️', '⚠️', '✅', '❌', '关闭', '图标', '复制', '文字色', '查看详情', '背景色', '边框色', '错误详情']

@@ -426,6 +426,10 @@ class MainWindow(QMainWindow):
         if 页面名称 in self._页面映射:
             self._页面堆栈.setCurrentIndex(self._页面映射[页面名称])
             self._当前页面 = 页面名称
+            # 同步更新导航栏选中项，保持导航切换一致性
+            self._导航栏.blockSignals(True)  # 阻止信号避免循环触发
+            self._导航栏.设置选中项(页面名称)
+            self._导航栏.blockSignals(False)
             self._状态栏.showMessage(f"当前页面: {页面名称}")
             self.页面切换信号.emit(页面名称)
     

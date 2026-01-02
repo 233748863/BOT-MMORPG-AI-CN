@@ -1,0 +1,4 @@
+# file: E:\BOT-MMORPG-AI-CN\配置\增强设置.py
+# hypothesis_version: 6.148.8
+
+[0.0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 1.0, 1.5, 2.0, 2.5, 3.0, 100, 200, 640, 'NMS阈值', 'UI检测启用', 'YOLO检测器', 'combat', 'dead', 'dialogue', 'gathering', 'idle', 'item', 'loading', 'looting', 'menu', 'model_first', 'monster', 'moving', 'npc', 'player', 'rule_first', 'skill_effect', 'unknown', 'weighted_mix', '低性能模式检测间隔', '低血量阈值', '决策引擎', '加载界面', '历史长度', '启用', '启用日志', '对话框', '帧率阈值', '战斗_敌人数量', '战斗_敌人距离', '技能', '拾取_物品距离', '日志长度', '检测间隔', '模型权重', '模型路径', '死亡界面', '特殊', '状态识别器', '移动', '策略', '紧急动作', '组合', '置信度累积系数', '置信度阈值', '自动降级', '菜单', '血条', '被围攻阈值', '规则权重', '资源/ui/health_bar.png', '资源/ui/loading.png', '资源/ui/menu.png', '输入尺寸', '鼠标']

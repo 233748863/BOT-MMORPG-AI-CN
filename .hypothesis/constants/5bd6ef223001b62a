@@ -1,0 +1,4 @@
+# file: E:\BOT-MMORPG-AI-CN\界面\样式\主题.py
+# hypothesis_version: 6.148.8
+
+['#10B981', '#1D4ED8', '#1E293B', '#2563EB', '#334155', '#3B82F6', '#64748B', '#94A3B8', '#CBD5E1', '#E2E8F0', '#EF4444', '#EFF6FF', '#F1F5F9', '#F59E0B', '#F8FAFC', '#FFFFFF', 'status-error', 'status-success', 'status-warning', '正常', '警告', '错误']
