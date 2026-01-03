@@ -14,6 +14,22 @@ os.chdir(os.path.dirname(os.path.abspath(__file__)))
 # 添加项目路径
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 抑制 TensorFlow 警告信息，避免启动时卡顿
+os.environ['TF_CPP_MIN_LOG_LEVEL'] = '2'  # 0=全部, 1=INFO, 2=WARNING, 3=ERROR
+os.environ['TF_ENABLE_ONEDNN_OPTS'] = '0'  # 禁用 oneDNN 优化警告
+
+# 抑制 Keras/TensorFlow 弃用警告
+import warnings
+warnings.filterwarnings('ignore', category=DeprecationWarning)
+warnings.filterwarnings('ignore', category=FutureWarning)
+warnings.filterwarnings('ignore', module='tensorflow')
+warnings.filterwarnings('ignore', module='keras')
+
+# 抑制 TensorFlow 的 absl 日志
+import logging
+logging.getLogger('tensorflow').setLevel(logging.ERROR)
+logging.getLogger('absl').setLevel(logging.ERROR)
+
 
 def 检查依赖():
     """检查必要的依赖是否已安装"""

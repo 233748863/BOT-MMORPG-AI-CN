@@ -4,6 +4,14 @@
 
 提供机器人运行功能的图形界面，包括模式选择、控制面板和状态监控。
 支持基础模式和增强模式运行。
+
+布局优化 (Requirements 4.1-4.5):
+- 采用左右两栏布局，左栏占50%宽度，右栏占50%宽度
+- 左栏：运行模式卡片 + 增强模块状态卡片
+- 右栏：运行状态卡片 + 运行日志卡片
+
+性能优化:
+- 使用状态更新节流器，最小更新间隔50ms
 """
 
 from typing import Optional, Dict
@@ -12,18 +20,22 @@ from datetime import datetime
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, 
     QPushButton, QFrame, QGridLayout, QComboBox,
-    QSizePolicy, QGroupBox, QCheckBox
+    QSizePolicy, QGroupBox, QCheckBox, QTextEdit,
+    QScrollArea
 )
 from PySide6.QtCore import Signal, Slot, Qt, QTimer
-from PySide6.QtGui import QImage, QPixmap
+from PySide6.QtGui import QImage, QPixmap, QTextCursor
 
 import numpy as np
 
 from 界面.样式.主题 import 颜色
+from 界面.样式.布局常量 import 布局常量
+from 界面.组件.通用组件 import Card
+from 界面.组件.性能优化 import 状态更新节流器
 
 
-class 运行控制面板(QFrame):
-    """运行控制面板组件"""
+class 运行模式卡片(Card):
+    """运行模式选择卡片组件 (Requirements 4.2)"""
     
     # 信号定义
     启动点击 = Signal()
@@ -33,111 +45,80 @@ class 运行控制面板(QFrame):
     子模式改变 = Signal(str)
     
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setProperty("class", "card")
-        self.setMinimumWidth(380)  # 设置最小宽度确保内容不被截断
-        self._初始化界面()
-    
-    def _初始化界面(self) -> None:
-        """初始化界面"""
-        self.setStyleSheet(f"""
-            QFrame {{
-                background-color: {颜色.卡片背景};
-                border-radius: 12px;
-                border: 1px solid {颜色.边框};
-            }}
-            QComboBox {{
-                padding: 8px 12px;
-                min-width: 160px;
-            }}
-        """)
-        
-        布局 = QVBoxLayout(self)
-        布局.setContentsMargins(20, 16, 20, 16)
-        布局.setSpacing(16)
-        
-        # 标题
-        标题 = QLabel("🎮 运行控制")
-        标题.setStyleSheet(f"""
-            font-size: 16px;
-            font-weight: bold;
-            color: {颜色.标题};
-        """)
-        布局.addWidget(标题)
+        super().__init__("🎮 运行模式", "", parent)
+        self._初始化内容()
+
+    def _初始化内容(self) -> None:
+        """初始化卡片内容"""
+        内容布局 = self.获取内容布局()
         
         # 运行模式选择
         运行模式容器 = QWidget()
         运行模式布局 = QHBoxLayout(运行模式容器)
         运行模式布局.setContentsMargins(0, 0, 0, 0)
-        运行模式布局.setSpacing(12)
+        运行模式布局.setSpacing(8)
         
         运行模式标签 = QLabel("运行模式:")
-        运行模式标签.setStyleSheet(f"color: {颜色.文字}; font-size: 13px;")
-        运行模式标签.setFixedWidth(70)
+        运行模式标签.setStyleSheet(f"color: {颜色.文字}; font-size: {布局常量.正文字号}px;")
+        运行模式标签.setFixedWidth(60)
         运行模式布局.addWidget(运行模式标签)
         
         self._运行模式选择 = QComboBox()
         self._运行模式选择.addItems(["基础模式", "增强模式"])
-        self._运行模式选择.setFixedWidth(200)
-        self._运行模式选择.setFixedHeight(36)
+        self._运行模式选择.setFixedHeight(布局常量.表单控件高度)
         self._运行模式选择.setStyleSheet(f"""
             QComboBox {{
-                padding-left: 12px;
-                padding-right: 30px;
-                font-size: 13px;
+                padding-left: 8px;
+                font-size: {布局常量.正文字号}px;
             }}
         """)
         self._运行模式选择.currentTextChanged.connect(self.运行模式改变.emit)
-        运行模式布局.addWidget(self._运行模式选择)
-        运行模式布局.addStretch()
+        运行模式布局.addWidget(self._运行模式选择, 1)
         
-        布局.addWidget(运行模式容器)
+        内容布局.addWidget(运行模式容器)
         
         # 子模式选择
         子模式容器 = QWidget()
         子模式布局 = QHBoxLayout(子模式容器)
         子模式布局.setContentsMargins(0, 0, 0, 0)
-        子模式布局.setSpacing(12)
+        子模式布局.setSpacing(8)
         
         子模式标签 = QLabel("任务模式:")
-        子模式标签.setStyleSheet(f"color: {颜色.文字}; font-size: 13px;")
-        子模式标签.setFixedWidth(70)
+        子模式标签.setStyleSheet(f"color: {颜色.文字}; font-size: {布局常量.正文字号}px;")
+        子模式标签.setFixedWidth(60)
         子模式布局.addWidget(子模式标签)
         
         self._子模式选择 = QComboBox()
         self._子模式选择.addItems(["主线任务", "自动战斗"])
-        self._子模式选择.setFixedWidth(200)
-        self._子模式选择.setFixedHeight(36)
+        self._子模式选择.setFixedHeight(布局常量.表单控件高度)
         self._子模式选择.setStyleSheet(f"""
             QComboBox {{
-                padding-left: 12px;
-                padding-right: 30px;
-                font-size: 13px;
+                padding-left: 8px;
+                font-size: {布局常量.正文字号}px;
             }}
         """)
         self._子模式选择.currentTextChanged.connect(self.子模式改变.emit)
-        子模式布局.addWidget(self._子模式选择)
-        子模式布局.addStretch()
+        子模式布局.addWidget(self._子模式选择, 1)
         
-        布局.addWidget(子模式容器)
-        
+        内容布局.addWidget(子模式容器)
+
         # 按钮容器
         按钮容器 = QWidget()
         按钮布局 = QHBoxLayout(按钮容器)
-        按钮布局.setContentsMargins(0, 0, 0, 0)
-        按钮布局.setSpacing(8)
+        按钮布局.setContentsMargins(0, 4, 0, 0)
+        按钮布局.setSpacing(布局常量.按钮间距)
         
         # 启动按钮
         self._启动按钮 = QPushButton("🚀 启动")
-        self._启动按钮.setFixedSize(80, 36)
+        self._启动按钮.setFixedSize(布局常量.按钮最小宽度 + 10, 布局常量.按钮高度)
         self._启动按钮.setCursor(Qt.PointingHandCursor)
         self._启动按钮.setStyleSheet(f"""
             QPushButton {{
                 background-color: {颜色.成功};
                 color: white;
                 border: none;
-                border-radius: 8px;
-                font-size: 13px;
+                border-radius: {布局常量.按钮圆角}px;
+                font-size: {布局常量.按钮文字字号}px;
                 font-weight: 500;
             }}
             QPushButton:hover {{
@@ -153,7 +134,7 @@ class 运行控制面板(QFrame):
         
         # 暂停按钮
         self._暂停按钮 = QPushButton("⏸ 暂停")
-        self._暂停按钮.setFixedSize(80, 36)
+        self._暂停按钮.setFixedSize(布局常量.按钮最小宽度 + 10, 布局常量.按钮高度)
         self._暂停按钮.setCursor(Qt.PointingHandCursor)
         self._暂停按钮.setEnabled(False)
         self._暂停按钮.setStyleSheet(f"""
@@ -161,8 +142,8 @@ class 运行控制面板(QFrame):
                 background-color: {颜色.警告};
                 color: white;
                 border: none;
-                border-radius: 8px;
-                font-size: 13px;
+                border-radius: {布局常量.按钮圆角}px;
+                font-size: {布局常量.按钮文字字号}px;
                 font-weight: 500;
             }}
             QPushButton:hover {{
@@ -175,10 +156,10 @@ class 运行控制面板(QFrame):
         """)
         self._暂停按钮.clicked.connect(self.暂停点击.emit)
         按钮布局.addWidget(self._暂停按钮)
-        
+
         # 停止按钮
         self._停止按钮 = QPushButton("⏹ 停止")
-        self._停止按钮.setFixedSize(80, 36)
+        self._停止按钮.setFixedSize(布局常量.按钮最小宽度 + 10, 布局常量.按钮高度)
         self._停止按钮.setCursor(Qt.PointingHandCursor)
         self._停止按钮.setEnabled(False)
         self._停止按钮.setStyleSheet(f"""
@@ -186,8 +167,8 @@ class 运行控制面板(QFrame):
                 background-color: {颜色.错误};
                 color: white;
                 border: none;
-                border-radius: 8px;
-                font-size: 13px;
+                border-radius: {布局常量.按钮圆角}px;
+                font-size: {布局常量.按钮文字字号}px;
                 font-weight: 500;
             }}
             QPushButton:hover {{
@@ -202,12 +183,12 @@ class 运行控制面板(QFrame):
         按钮布局.addWidget(self._停止按钮)
         
         按钮布局.addStretch()
-        布局.addWidget(按钮容器)
+        内容布局.addWidget(按钮容器)
         
         # 快捷键提示
-        提示 = QLabel("💡 快捷键: T 暂停/继续, ESC 停止")
-        提示.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px;")
-        布局.addWidget(提示)
+        提示 = QLabel("💡 T 暂停/继续, ESC 停止")
+        提示.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
+        内容布局.addWidget(提示)
     
     def 设置运行状态(self, 运行中: bool, 已暂停: bool = False) -> None:
         """设置运行状态，更新按钮状态"""
@@ -236,37 +217,171 @@ class 运行控制面板(QFrame):
         return self._运行模式选择.currentText() == "增强模式"
 
 
-
-class 运行状态监控(QFrame):
-    """运行状态监控组件"""
+class 增强模块状态卡片(Card):
+    """增强模块状态显示卡片组件 (Requirements 4.5)"""
     
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setProperty("class", "card")
-        self._初始化界面()
+        super().__init__("🔧 增强模块状态", "", parent)
+        self._初始化内容()
     
-    def _初始化界面(self) -> None:
-        """初始化界面"""
-        self.setStyleSheet(f"""
-            QFrame {{
-                background-color: {颜色.卡片背景};
-                border-radius: 12px;
-                border: 1px solid {颜色.边框};
-            }}
-        """)
+    def _初始化内容(self) -> None:
+        """初始化卡片内容"""
+        内容布局 = self.获取内容布局()
         
-        布局 = QVBoxLayout(self)
-        布局.setContentsMargins(16, 12, 16, 12)
-        布局.setSpacing(8)
+        # 模块状态网格
+        模块网格 = QGridLayout()
+        模块网格.setSpacing(6)
+        模块网格.setContentsMargins(0, 0, 0, 0)
         
-        # 标题
-        标题 = QLabel("📊 状态监控")
-        标题.setStyleSheet(f"""
-            font-size: 14px;
-            font-weight: bold;
-            color: {颜色.标题};
-        """)
-        布局.addWidget(标题)
+        # YOLO检测器
+        self._YOLO状态 = self._创建模块状态项("YOLO检测器:", 模块网格, 0, 0)
+        
+        # 状态识别器
+        self._状态识别状态 = self._创建模块状态项("状态识别器:", 模块网格, 1, 0)
+        
+        # 决策引擎
+        self._决策引擎状态 = self._创建模块状态项("决策引擎:", 模块网格, 2, 0)
+        
+        # 脱困模块
+        self._脱困状态 = self._创建模块状态项("脱困模块:", 模块网格, 0, 1)
+        
+        # 自动调参
+        self._自动调参状态 = self._创建模块状态项("自动调参:", 模块网格, 1, 1)
+        
+        内容布局.addLayout(模块网格)
+        
+        # 性能模式
+        性能容器 = QWidget()
+        性能布局 = QHBoxLayout(性能容器)
+        性能布局.setContentsMargins(0, 4, 0, 0)
+        性能布局.setSpacing(6)
+        
+        性能标签 = QLabel("性能模式:")
+        性能标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
+        性能布局.addWidget(性能标签)
+        
+        self._性能模式标签 = QLabel("正常")
+        self._性能模式标签.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px; font-weight: 500;")
+        性能布局.addWidget(self._性能模式标签)
+        性能布局.addStretch()
+        
+        内容布局.addWidget(性能容器)
+    
+    def _创建模块状态项(self, 标题: str, 网格: QGridLayout, 行: int, 列: int) -> QLabel:
+        """创建模块状态项"""
+        容器 = QWidget()
+        容器布局 = QHBoxLayout(容器)
+        容器布局.setContentsMargins(0, 0, 0, 0)
+        容器布局.setSpacing(4)
+        
+        标题标签 = QLabel(标题)
+        标题标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
+        标题标签.setFixedWidth(70)
+        容器布局.addWidget(标题标签)
+        
+        状态标签 = QLabel("未加载")
+        状态标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
+        容器布局.addWidget(状态标签)
+        容器布局.addStretch()
+        
+        网格.addWidget(容器, 行, 列)
+        return 状态标签
+
+    def 更新YOLO状态(self, 可用: bool) -> None:
+        """更新YOLO检测器状态"""
+        if 可用:
+            self._YOLO状态.setText("✅ 已加载")
+            self._YOLO状态.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px;")
+        else:
+            self._YOLO状态.setText("❌ 不可用")
+            self._YOLO状态.setStyleSheet(f"color: {颜色.错误}; font-size: {布局常量.次要文字字号}px;")
+    
+    def 更新状态识别状态(self, 可用: bool) -> None:
+        """更新状态识别器状态"""
+        if 可用:
+            self._状态识别状态.setText("✅ 已加载")
+            self._状态识别状态.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px;")
+        else:
+            self._状态识别状态.setText("❌ 不可用")
+            self._状态识别状态.setStyleSheet(f"color: {颜色.错误}; font-size: {布局常量.次要文字字号}px;")
+    
+    def 更新决策引擎状态(self, 可用: bool) -> None:
+        """更新决策引擎状态"""
+        if 可用:
+            self._决策引擎状态.setText("✅ 已加载")
+            self._决策引擎状态.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px;")
+        else:
+            self._决策引擎状态.setText("❌ 不可用")
+            self._决策引擎状态.setStyleSheet(f"color: {颜色.错误}; font-size: {布局常量.次要文字字号}px;")
+    
+    def 更新脱困状态(self, 可用: bool) -> None:
+        """更新脱困模块状态"""
+        if 可用:
+            self._脱困状态.setText("✅ 已加载")
+            self._脱困状态.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px;")
+        else:
+            self._脱困状态.setText("❌ 不可用")
+            self._脱困状态.setStyleSheet(f"color: {颜色.错误}; font-size: {布局常量.次要文字字号}px;")
+    
+    def 更新自动调参状态(self, 可用: bool) -> None:
+        """更新自动调参状态"""
+        if 可用:
+            self._自动调参状态.setText("⚠️ 启用")
+            self._自动调参状态.setStyleSheet(f"color: {颜色.警告}; font-size: {布局常量.次要文字字号}px;")
+        else:
+            self._自动调参状态.setText("⏸ 禁用")
+            self._自动调参状态.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
+    
+    def 更新性能模式(self, 低性能: bool) -> None:
+        """更新性能模式显示"""
+        if 低性能:
+            self._性能模式标签.setText("⚠️ 低性能")
+            self._性能模式标签.setStyleSheet(f"color: {颜色.警告}; font-size: {布局常量.次要文字字号}px; font-weight: 500;")
+        else:
+            self._性能模式标签.setText("✅ 正常")
+            self._性能模式标签.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px; font-weight: 500;")
+    
+    def 更新模块状态(self, 状态数据: Dict[str, bool]) -> None:
+        """批量更新模块状态"""
+        if "YOLO" in 状态数据:
+            self.更新YOLO状态(状态数据["YOLO"])
+        if "状态识别" in 状态数据:
+            self.更新状态识别状态(状态数据["状态识别"])
+        if "决策引擎" in 状态数据:
+            self.更新决策引擎状态(状态数据["决策引擎"])
+        if "脱困" in 状态数据:
+            self.更新脱困状态(状态数据["脱困"])
+        if "自动调参" in 状态数据:
+            self.更新自动调参状态(状态数据["自动调参"])
+        if "低性能" in 状态数据:
+            self.更新性能模式(状态数据["低性能"])
+    
+    def 重置(self) -> None:
+        """重置所有状态"""
+        self._YOLO状态.setText("未加载")
+        self._YOLO状态.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
+        self._状态识别状态.setText("未加载")
+        self._状态识别状态.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
+        self._决策引擎状态.setText("未加载")
+        self._决策引擎状态.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
+        self._脱困状态.setText("未加载")
+        self._脱困状态.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
+        self._自动调参状态.setText("⏸ 禁用")
+        self._自动调参状态.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
+        self._性能模式标签.setText("正常")
+        self._性能模式标签.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px; font-weight: 500;")
+
+
+class 运行状态卡片(Card):
+    """运行状态监控卡片组件 (Requirements 4.4)"""
+    
+    def __init__(self, parent=None):
+        super().__init__("📊 运行状态", "", parent)
+        self._初始化内容()
+    
+    def _初始化内容(self) -> None:
+        """初始化卡片内容"""
+        内容布局 = self.获取内容布局()
         
         # 状态网格
         状态网格 = QGridLayout()
@@ -291,7 +406,7 @@ class 运行状态监控(QFrame):
         # 运动量
         self._运动量标签 = self._创建状态项("运动量:", "0", 状态网格, 2, 1)
         
-        布局.addLayout(状态网格)
+        内容布局.addLayout(状态网格)
     
     def _创建状态项(self, 标题: str, 初始值: str, 网格: QGridLayout, 
                    行: int, 列: int) -> QLabel:
@@ -302,11 +417,11 @@ class 运行状态监控(QFrame):
         容器布局.setSpacing(4)
         
         标题标签 = QLabel(标题)
-        标题标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px;")
+        标题标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: {布局常量.次要文字字号}px;")
         容器布局.addWidget(标题标签)
         
         值标签 = QLabel(初始值)
-        值标签.setStyleSheet(f"color: {颜色.文字}; font-size: 12px; font-weight: 500;")
+        值标签.setStyleSheet(f"color: {颜色.文字}; font-size: {布局常量.正文字号}px; font-weight: 500;")
         容器布局.addWidget(值标签)
         容器布局.addStretch()
         
@@ -324,7 +439,7 @@ class 运行状态监控(QFrame):
         }
         状态颜色 = 颜色映射.get(状态, 颜色.文字)
         self._运行状态标签.setText(状态)
-        self._运行状态标签.setStyleSheet(f"color: {状态颜色}; font-size: 13px; font-weight: 500;")
+        self._运行状态标签.setStyleSheet(f"color: {状态颜色}; font-size: {布局常量.正文字号}px; font-weight: 500;")
     
     def 更新当前动作(self, 动作: str) -> None:
         """更新当前动作显示"""
@@ -340,7 +455,7 @@ class 运行状态监控(QFrame):
         }
         显示文本 = 来源映射.get(来源, 来源)
         self._动作来源标签.setText(显示文本)
-    
+
     def 更新游戏状态(self, 状态: str) -> None:
         """更新游戏状态显示"""
         颜色映射 = {
@@ -354,7 +469,7 @@ class 运行状态监控(QFrame):
         }
         状态颜色 = 颜色映射.get(状态, 颜色.文字)
         self._游戏状态标签.setText(状态)
-        self._游戏状态标签.setStyleSheet(f"color: {状态颜色}; font-size: 13px; font-weight: 500;")
+        self._游戏状态标签.setStyleSheet(f"color: {状态颜色}; font-size: {布局常量.正文字号}px; font-weight: 500;")
     
     def 更新帧率(self, 帧率: float) -> None:
         """更新帧率显示"""
@@ -367,7 +482,7 @@ class 运行状态监控(QFrame):
             帧率颜色 = 颜色.错误
         
         self._帧率标签.setText(f"{帧率:.1f} FPS")
-        self._帧率标签.setStyleSheet(f"color: {帧率颜色}; font-size: 13px; font-weight: 500;")
+        self._帧率标签.setStyleSheet(f"color: {帧率颜色}; font-size: {布局常量.正文字号}px; font-weight: 500;")
     
     def 更新运动量(self, 运动量: float) -> None:
         """更新运动量显示"""
@@ -383,402 +498,57 @@ class 运行状态监控(QFrame):
         self.更新运动量(0)
 
 
-class 增强模块状态(QFrame):
-    """增强模块状态显示组件"""
+class 运行日志卡片(Card):
+    """运行日志显示卡片组件"""
     
     def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setProperty("class", "card")
-        self._初始化界面()
+        super().__init__("📝 运行日志", "", parent)
+        self._初始化内容()
     
-    def _初始化界面(self) -> None:
-        """初始化界面"""
-        self.setStyleSheet(f"""
-            QFrame {{
-                background-color: {颜色.卡片背景};
-                border-radius: 12px;
+    def _初始化内容(self) -> None:
+        """初始化卡片内容"""
+        内容布局 = self.获取内容布局()
+        
+        # 日志文本框
+        self._日志文本框 = QTextEdit()
+        self._日志文本框.setReadOnly(True)
+        self._日志文本框.setStyleSheet(f"""
+            QTextEdit {{
+                background-color: {颜色.背景};
                 border: 1px solid {颜色.边框};
-            }}
-        """)
-        
-        布局 = QVBoxLayout(self)
-        布局.setContentsMargins(16, 12, 16, 12)
-        布局.setSpacing(8)
-        
-        # 标题
-        标题 = QLabel("🔧 增强模块状态")
-        标题.setStyleSheet(f"""
-            font-size: 14px;
-            font-weight: bold;
-            color: {颜色.标题};
-        """)
-        布局.addWidget(标题)
-        
-        # 模块状态网格
-        模块网格 = QGridLayout()
-        模块网格.setSpacing(6)
-        
-        # YOLO检测器
-        self._YOLO状态 = self._创建模块状态项("YOLO检测器:", 模块网格, 0)
-        
-        # 状态识别器
-        self._状态识别状态 = self._创建模块状态项("状态识别器:", 模块网格, 1)
-        
-        # 决策引擎
-        self._决策引擎状态 = self._创建模块状态项("决策引擎:", 模块网格, 2)
-        
-        布局.addLayout(模块网格)
-        
-        # 性能模式
-        性能容器 = QWidget()
-        性能布局 = QHBoxLayout(性能容器)
-        性能布局.setContentsMargins(0, 4, 0, 0)
-        性能布局.setSpacing(6)
-        
-        性能标签 = QLabel("性能模式:")
-        性能标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px;")
-        性能布局.addWidget(性能标签)
-        
-        self._性能模式标签 = QLabel("正常")
-        self._性能模式标签.setStyleSheet(f"color: {颜色.成功}; font-size: 12px; font-weight: 500;")
-        性能布局.addWidget(self._性能模式标签)
-        性能布局.addStretch()
-        
-        布局.addWidget(性能容器)
-    
-    def _创建模块状态项(self, 标题: str, 网格: QGridLayout, 行: int) -> QLabel:
-        """创建模块状态项"""
-        容器 = QWidget()
-        容器布局 = QHBoxLayout(容器)
-        容器布局.setContentsMargins(0, 0, 0, 0)
-        容器布局.setSpacing(8)
-        
-        标题标签 = QLabel(标题)
-        标题标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 13px;")
-        标题标签.setFixedWidth(90)
-        容器布局.addWidget(标题标签)
-        
-        状态标签 = QLabel("未加载")
-        状态标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 13px;")
-        容器布局.addWidget(状态标签)
-        容器布局.addStretch()
-        
-        网格.addWidget(容器, 行, 0)
-        return 状态标签
-    
-    def 更新YOLO状态(self, 可用: bool) -> None:
-        """更新YOLO检测器状态"""
-        if 可用:
-            self._YOLO状态.setText("✅ 已加载")
-            self._YOLO状态.setStyleSheet(f"color: {颜色.成功}; font-size: 13px;")
-        else:
-            self._YOLO状态.setText("❌ 不可用")
-            self._YOLO状态.setStyleSheet(f"color: {颜色.错误}; font-size: 13px;")
-    
-    def 更新状态识别状态(self, 可用: bool) -> None:
-        """更新状态识别器状态"""
-        if 可用:
-            self._状态识别状态.setText("✅ 已加载")
-            self._状态识别状态.setStyleSheet(f"color: {颜色.成功}; font-size: 13px;")
-        else:
-            self._状态识别状态.setText("❌ 不可用")
-            self._状态识别状态.setStyleSheet(f"color: {颜色.错误}; font-size: 13px;")
-    
-    def 更新决策引擎状态(self, 可用: bool) -> None:
-        """更新决策引擎状态"""
-        if 可用:
-            self._决策引擎状态.setText("✅ 已加载")
-            self._决策引擎状态.setStyleSheet(f"color: {颜色.成功}; font-size: 13px;")
-        else:
-            self._决策引擎状态.setText("❌ 不可用")
-            self._决策引擎状态.setStyleSheet(f"color: {颜色.错误}; font-size: 13px;")
-    
-    def 更新性能模式(self, 低性能: bool) -> None:
-        """更新性能模式显示"""
-        if 低性能:
-            self._性能模式标签.setText("⚠️ 低性能")
-            self._性能模式标签.setStyleSheet(f"color: {颜色.警告}; font-size: 13px; font-weight: 500;")
-        else:
-            self._性能模式标签.setText("✅ 正常")
-            self._性能模式标签.setStyleSheet(f"color: {颜色.成功}; font-size: 13px; font-weight: 500;")
-    
-    def 更新模块状态(self, 状态数据: Dict[str, bool]) -> None:
-        """批量更新模块状态"""
-        if "YOLO" in 状态数据:
-            self.更新YOLO状态(状态数据["YOLO"])
-        if "状态识别" in 状态数据:
-            self.更新状态识别状态(状态数据["状态识别"])
-        if "决策引擎" in 状态数据:
-            self.更新决策引擎状态(状态数据["决策引擎"])
-        if "低性能" in 状态数据:
-            self.更新性能模式(状态数据["低性能"])
-    
-    def 重置(self) -> None:
-        """重置所有状态"""
-        self._YOLO状态.setText("未加载")
-        self._YOLO状态.setStyleSheet(f"color: {颜色.次要文字}; font-size: 13px;")
-        self._状态识别状态.setText("未加载")
-        self._状态识别状态.setStyleSheet(f"color: {颜色.次要文字}; font-size: 13px;")
-        self._决策引擎状态.setText("未加载")
-        self._决策引擎状态.setStyleSheet(f"color: {颜色.次要文字}; font-size: 13px;")
-        self._性能模式标签.setText("正常")
-        self._性能模式标签.setStyleSheet(f"color: {颜色.成功}; font-size: 13px; font-weight: 500;")
-
-
-class 自动调参面板(QFrame):
-    """自动调参控制面板组件 (需求 9.1, 9.2)
-    
-    提供自动调参功能的控制界面，包括：
-    - 启用/禁用开关 (需求 9.1)
-    - 激进程度选择 (需求 9.2)
-    - 参数锁定控件
-    - 重置为默认值按钮
-    """
-    
-    # 信号定义
-    启用状态改变 = Signal(bool)
-    激进程度改变 = Signal(str)
-    参数锁定改变 = Signal(str, bool)  # 参数名, 是否锁定
-    重置参数 = Signal()
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setProperty("class", "card")
-        self._自动调参器 = None
-        self._参数锁定控件 = {}  # 存储参数锁定复选框
-        self._初始化自动调参器()
-        self._初始化界面()
-    
-    def _初始化自动调参器(self):
-        """初始化自动调参器"""
-        try:
-            from 核心.自动调参 import AutoTuner, AggressivenessLevel
-            self._自动调参器 = AutoTuner(enabled=False)
-            self._激进程度枚举 = AggressivenessLevel
-        except Exception as e:
-            print(f"初始化自动调参器失败: {e}")
-            self._自动调参器 = None
-            self._激进程度枚举 = None
-    
-    def _初始化界面(self) -> None:
-        """初始化界面"""
-        self.setStyleSheet(f"""
-            QFrame {{
-                background-color: {颜色.卡片背景};
-                border-radius: 12px;
-                border: 1px solid {颜色.边框};
-            }}
-        """)
-        
-        布局 = QVBoxLayout(self)
-        布局.setContentsMargins(16, 12, 16, 12)
-        布局.setSpacing(10)
-        
-        # 标题行
-        标题行 = QHBoxLayout()
-        标题 = QLabel("🎯 自动调参")
-        标题.setStyleSheet(f"""
-            font-size: 14px;
-            font-weight: bold;
-            color: {颜色.标题};
-        """)
-        标题行.addWidget(标题)
-        标题行.addStretch()
-        
-        # 启用/禁用开关 (需求 9.1)
-        self._启用开关 = QCheckBox("启用")
-        self._启用开关.setStyleSheet(f"""
-            QCheckBox {{
+                border-radius: 4px;
+                font-family: Consolas, Monaco, monospace;
+                font-size: {布局常量.次要文字字号}px;
                 color: {颜色.文字};
-                font-size: 12px;
-                spacing: 6px;
+                padding: 4px;
             }}
         """)
-        self._启用开关.stateChanged.connect(self._处理启用状态改变)
-        标题行.addWidget(self._启用开关)
-        
-        布局.addLayout(标题行)
-        
-        # 激进程度选择 (需求 9.2)
-        激进程度容器 = QWidget()
-        激进程度布局 = QHBoxLayout(激进程度容器)
-        激进程度布局.setContentsMargins(0, 0, 0, 0)
-        激进程度布局.setSpacing(8)
-        
-        激进程度标签 = QLabel("调参力度:")
-        激进程度标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px;")
-        激进程度标签.setFixedWidth(60)
-        激进程度布局.addWidget(激进程度标签)
-        
-        self._激进程度选择 = QComboBox()
-        self._激进程度选择.addItems(["保守", "平衡", "激进"])
-        self._激进程度选择.setCurrentIndex(1)  # 默认平衡
-        self._激进程度选择.setFixedHeight(28)
-        self._激进程度选择.setStyleSheet(f"""
-            QComboBox {{
-                padding-left: 8px;
-                font-size: 12px;
-            }}
-        """)
-        self._激进程度选择.currentTextChanged.connect(self._处理激进程度改变)
-        激进程度布局.addWidget(self._激进程度选择, 1)
-        
-        布局.addWidget(激进程度容器)
-        
-        # 参数锁定区域
-        锁定标签 = QLabel("参数锁定:")
-        锁定标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px; margin-top: 4px;")
-        布局.addWidget(锁定标签)
-        
-        # 参数锁定网格
-        锁定网格 = QGridLayout()
-        锁定网格.setSpacing(4)
-        锁定网格.setContentsMargins(0, 0, 0, 0)
-        
-        # 创建参数锁定复选框
-        参数列表 = [
-            ("action_cooldown", "动作冷却"),
-            ("state_switch_threshold", "状态切换"),
-            ("rule_priority_weight", "规则权重"),
-            ("detection_confidence_threshold", "检测置信度"),
-        ]
-        
-        for 索引, (参数名, 显示名) in enumerate(参数列表):
-            行 = 索引 // 2
-            列 = 索引 % 2
-            
-            锁定框 = QCheckBox(显示名)
-            锁定框.setStyleSheet(f"""
-                QCheckBox {{
-                    color: {颜色.文字};
-                    font-size: 11px;
-                    spacing: 4px;
-                }}
-            """)
-            锁定框.stateChanged.connect(
-                lambda state, name=参数名: self._处理参数锁定改变(name, state)
-            )
-            锁定网格.addWidget(锁定框, 行, 列)
-            self._参数锁定控件[参数名] = 锁定框
-        
-        布局.addLayout(锁定网格)
-        
-        # 重置按钮
-        self._重置按钮 = QPushButton("🔄 重置为默认值")
-        self._重置按钮.setFixedHeight(28)
-        self._重置按钮.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {颜色.卡片背景};
-                color: {颜色.文字};
-                border: 1px solid {颜色.边框};
-                border-radius: 6px;
-                font-size: 12px;
-            }}
-            QPushButton:hover {{
-                background-color: {颜色.悬停背景};
-            }}
-        """)
-        self._重置按钮.clicked.connect(self._处理重置参数)
-        布局.addWidget(self._重置按钮)
-        
-        # 初始化状态
-        self._更新控件状态()
+        self._日志文本框.setMinimumHeight(120)
+        内容布局.addWidget(self._日志文本框)
     
-    def _处理启用状态改变(self, state: int) -> None:
-        """处理启用状态改变"""
-        启用 = state == Qt.Checked
+    def 添加日志(self, 消息: str, 级别: str = "info") -> None:
+        """添加日志消息"""
+        时间戳 = datetime.now().strftime("%H:%M:%S")
         
-        if self._自动调参器:
-            self._自动调参器.enabled = 启用
-        
-        self._更新控件状态()
-        self.启用状态改变.emit(启用)
-    
-    def _处理激进程度改变(self, 程度文本: str) -> None:
-        """处理激进程度改变"""
-        if not self._自动调参器 or not self._激进程度枚举:
-            return
-        
-        程度映射 = {
-            "保守": self._激进程度枚举.CONSERVATIVE,
-            "平衡": self._激进程度枚举.BALANCED,
-            "激进": self._激进程度枚举.AGGRESSIVE,
+        颜色映射 = {
+            "info": 颜色.文字,
+            "success": 颜色.成功,
+            "warning": 颜色.警告,
+            "error": 颜色.错误,
         }
+        消息颜色 = 颜色映射.get(级别, 颜色.文字)
         
-        if 程度文本 in 程度映射:
-            self._自动调参器.aggressiveness = 程度映射[程度文本]
-            self.激进程度改变.emit(程度文本)
-    
-    def _处理参数锁定改变(self, 参数名: str, state: int) -> None:
-        """处理参数锁定状态改变"""
-        锁定 = state == Qt.Checked
+        格式化消息 = f'<span style="color: {颜色.次要文字}">[{时间戳}]</span> <span style="color: {消息颜色}">{消息}</span>'
+        self._日志文本框.append(格式化消息)
         
-        if self._自动调参器:
-            try:
-                if 锁定:
-                    self._自动调参器.lock_parameter(参数名)
-                else:
-                    self._自动调参器.unlock_parameter(参数名)
-            except ValueError as e:
-                print(f"参数锁定操作失败: {e}")
-        
-        self.参数锁定改变.emit(参数名, 锁定)
+        # 滚动到底部
+        光标 = self._日志文本框.textCursor()
+        光标.movePosition(QTextCursor.End)
+        self._日志文本框.setTextCursor(光标)
     
-    def _处理重置参数(self) -> None:
-        """处理重置参数"""
-        if self._自动调参器:
-            self._自动调参器.reset_to_defaults()
-        
-        self.重置参数.emit()
-    
-    def _更新控件状态(self) -> None:
-        """根据启用状态更新控件可用性"""
-        启用 = self._启用开关.isChecked()
-        
-        self._激进程度选择.setEnabled(启用)
-        self._重置按钮.setEnabled(启用)
-        
-        for 控件 in self._参数锁定控件.values():
-            控件.setEnabled(启用)
-    
-    def 获取启用状态(self) -> bool:
-        """获取自动调参是否启用"""
-        return self._启用开关.isChecked()
-    
-    def 设置启用状态(self, 启用: bool) -> None:
-        """设置自动调参启用状态"""
-        self._启用开关.setChecked(启用)
-    
-    def 获取激进程度(self) -> str:
-        """获取当前激进程度"""
-        return self._激进程度选择.currentText()
-    
-    def 设置激进程度(self, 程度: str) -> None:
-        """设置激进程度"""
-        索引 = self._激进程度选择.findText(程度)
-        if 索引 >= 0:
-            self._激进程度选择.setCurrentIndex(索引)
-    
-    def 获取锁定参数列表(self) -> list:
-        """获取所有被锁定的参数名称列表"""
-        锁定列表 = []
-        for 参数名, 控件 in self._参数锁定控件.items():
-            if 控件.isChecked():
-                锁定列表.append(参数名)
-        return 锁定列表
-    
-    def 获取自动调参器(self):
-        """获取自动调参器实例"""
-        return self._自动调参器
-    
-    def 重置(self) -> None:
-        """重置面板状态"""
-        self._启用开关.setChecked(False)
-        self._激进程度选择.setCurrentIndex(1)  # 平衡
-        for 控件 in self._参数锁定控件.values():
-            控件.setChecked(False)
-        self._更新控件状态()
-
+    def 清空日志(self) -> None:
+        """清空日志"""
+        self._日志文本框.clear()
 
 
 class 脱困提示(QFrame):
@@ -794,21 +564,21 @@ class 脱困提示(QFrame):
         self.setStyleSheet(f"""
             QFrame {{
                 background-color: {颜色.警告};
-                border-radius: 8px;
+                border-radius: {布局常量.卡片圆角}px;
                 border: none;
             }}
         """)
         
         布局 = QHBoxLayout(self)
-        布局.setContentsMargins(16, 10, 16, 10)
+        布局.setContentsMargins(布局常量.卡片内边距, 8, 布局常量.卡片内边距, 8)
         布局.setSpacing(8)
         
         图标 = QLabel("⚠️")
-        图标.setStyleSheet("font-size: 16px;")
+        图标.setStyleSheet(f"font-size: {布局常量.页面标题字号}px;")
         布局.addWidget(图标)
         
         self._提示文本 = QLabel("检测到角色可能卡住，正在执行脱困动作...")
-        self._提示文本.setStyleSheet("color: white; font-size: 13px; font-weight: 500;")
+        self._提示文本.setStyleSheet(f"color: white; font-size: {布局常量.正文字号}px; font-weight: 500;")
         布局.addWidget(self._提示文本, 1)
     
     def 显示提示(self, 消息: str = None) -> None:
@@ -824,10 +594,15 @@ class 脱困提示(QFrame):
 
 class 运行页(QWidget):
     """
-    运行页面
+    运行页面 (Requirements 4.1-4.5)
     
     提供机器人运行功能的完整界面，包括模式选择、控制面板和状态监控。
     支持基础模式和增强模式运行。
+    
+    布局结构:
+    - 左右两栏布局，左栏占50%宽度，右栏占50%宽度
+    - 左栏：运行模式卡片 + 增强模块状态卡片
+    - 右栏：运行状态卡片 + 运行日志卡片
     """
     
     # 信号定义
@@ -845,18 +620,27 @@ class 运行页(QWidget):
         self._倒计时 = 0
         self._倒计时定时器: Optional[QTimer] = None
         
+        # 状态更新节流器（最小更新间隔50ms）
+        self._状态节流器 = 状态更新节流器(最小间隔ms=50, parent=self)
+        self._状态节流器.设置回调(self._执行状态更新)
+        
         self._初始化界面()
     
     def _初始化界面(self) -> None:
-        """初始化界面布局"""
+        """初始化界面布局 (Requirements 4.1)"""
         主布局 = QVBoxLayout(self)
-        主布局.setContentsMargins(24, 24, 24, 24)
-        主布局.setSpacing(16)
-        
+        主布局.setContentsMargins(
+            布局常量.内容区外边距,
+            布局常量.内容区外边距,
+            布局常量.内容区外边距,
+            布局常量.内容区外边距
+        )
+        主布局.setSpacing(布局常量.卡片间距)
+
         # 页面标题
         标题 = QLabel("🤖 机器人运行")
         标题.setStyleSheet(f"""
-            font-size: 22px;
+            font-size: {布局常量.页面标题字号}px;
             font-weight: bold;
             color: {颜色.标题};
         """)
@@ -866,87 +650,57 @@ class 运行页(QWidget):
         self._脱困提示 = 脱困提示()
         主布局.addWidget(self._脱困提示)
         
-        # 内容区域 (左右布局)
+        # 内容区域 - 左右两栏布局 (50:50) (Requirements 4.1)
         内容容器 = QWidget()
         内容布局 = QHBoxLayout(内容容器)
         内容布局.setContentsMargins(0, 0, 0, 0)
-        内容布局.setSpacing(16)
+        内容布局.setSpacing(布局常量.卡片间距)
         
-        # 左侧: 控制面板和状态监控
-        左侧容器 = QWidget()
-        左侧布局 = QVBoxLayout(左侧容器)
-        左侧布局.setContentsMargins(0, 0, 0, 0)
-        左侧布局.setSpacing(12)
+        # 左栏 (50%) - 运行模式卡片 + 增强模块状态卡片 (Requirements 4.2)
+        左栏 = QWidget()
+        左栏布局 = QVBoxLayout(左栏)
+        左栏布局.setContentsMargins(0, 0, 0, 0)
+        左栏布局.setSpacing(布局常量.卡片间距)
         
-        # 控制面板（包含状态监控）
-        self._控制面板 = 运行控制面板()
-        self._控制面板.启动点击.connect(self._处理启动)
-        self._控制面板.暂停点击.connect(self._处理暂停)
-        self._控制面板.停止点击.connect(self._处理停止)
-        左侧布局.addWidget(self._控制面板)
+        # 运行模式卡片
+        self._运行模式卡片 = 运行模式卡片()
+        self._运行模式卡片.启动点击.connect(self._处理启动)
+        self._运行模式卡片.暂停点击.connect(self._处理暂停)
+        self._运行模式卡片.停止点击.connect(self._处理停止)
+        左栏布局.addWidget(self._运行模式卡片)
         
-        # 状态监控（紧凑版）
-        self._状态监控 = 运行状态监控()
-        左侧布局.addWidget(self._状态监控)
+        # 增强模块状态卡片 (Requirements 4.5)
+        self._增强模块状态卡片 = 增强模块状态卡片()
+        左栏布局.addWidget(self._增强模块状态卡片)
         
-        左侧布局.addStretch()
-        内容布局.addWidget(左侧容器, 2)  # 左侧占2份
+        左栏布局.addStretch()
+        内容布局.addWidget(左栏, 布局常量.运行页左栏比例)
         
-        # 右侧: 增强模块状态和自动调参面板
-        右侧容器 = QWidget()
-        右侧布局 = QVBoxLayout(右侧容器)
-        右侧布局.setContentsMargins(0, 0, 0, 0)
-        右侧布局.setSpacing(12)
+        # 右栏 (50%) - 运行状态卡片 + 运行日志卡片 (Requirements 4.3, 4.4)
+        右栏 = QWidget()
+        右栏布局 = QVBoxLayout(右栏)
+        右栏布局.setContentsMargins(0, 0, 0, 0)
+        右栏布局.setSpacing(布局常量.卡片间距)
         
-        # 增强模块状态
-        self._增强模块状态 = 增强模块状态()
-        右侧布局.addWidget(self._增强模块状态)
+        # 运行状态卡片 (Requirements 4.4)
+        self._运行状态卡片 = 运行状态卡片()
+        右栏布局.addWidget(self._运行状态卡片)
         
-        # 自动调参面板 (需求 9.1, 9.2)
-        self._自动调参面板 = 自动调参面板()
-        右侧布局.addWidget(self._自动调参面板)
+        # 运行日志卡片
+        self._运行日志卡片 = 运行日志卡片()
+        右栏布局.addWidget(self._运行日志卡片, 1)
         
-        右侧布局.addStretch()
-        右侧容器.setFixedWidth(200)  # 固定右侧宽度
-        内容布局.addWidget(右侧容器)
+        内容布局.addWidget(右栏, 布局常量.运行页右栏比例)
         
         主布局.addWidget(内容容器, 1)
-        
-        # 底部提示卡片
-        提示卡片 = QFrame()
-        提示卡片.setStyleSheet(f"""
-            QFrame {{
-                background-color: {颜色.选中背景};
-                border-radius: 12px;
-                border: 1px solid {颜色.边框};
-            }}
-        """)
-        提示布局 = QVBoxLayout(提示卡片)
-        提示布局.setContentsMargins(16, 12, 16, 12)
-        提示布局.setSpacing(8)
-        
-        提示标题 = QLabel("📋 运行说明")
-        提示标题.setStyleSheet(f"color: {颜色.标题}; font-size: 14px; font-weight: 500;")
-        提示布局.addWidget(提示标题)
-        
-        提示内容 = QLabel(
-            "• 基础模式: 使用训练好的模型进行模仿学习\n"
-            "• 增强模式: 集成YOLO检测、状态识别和智能决策引擎\n"
-            "• 自动调参: 根据运行表现自动优化参数\n"
-            "• 运行前请确保已训练好模型，并切换到游戏窗口"
-        )
-        提示内容.setStyleSheet(f"color: {颜色.文字}; font-size: 12px;")
-        提示内容.setWordWrap(True)
-        提示布局.addWidget(提示内容)
-        
-        主布局.addWidget(提示卡片)
-    
+
     def _处理启动(self) -> None:
         """处理启动运行"""
         # 开始倒计时
         self._倒计时 = 4
-        self._状态监控.更新运行状态(f"倒计时 {self._倒计时}...")
-        self._控制面板.设置运行状态(True, False)
+        self._运行状态卡片.更新运行状态(f"倒计时 {self._倒计时}...")
+        self._运行模式卡片.设置运行状态(True, False)
+        self._运行日志卡片.添加日志("准备启动运行...", "info")
         
         # 创建倒计时定时器
         self._倒计时定时器 = QTimer(self)
@@ -958,7 +712,7 @@ class 运行页(QWidget):
         self._倒计时 -= 1
         
         if self._倒计时 > 0:
-            self._状态监控.更新运行状态(f"倒计时 {self._倒计时}...")
+            self._运行状态卡片.更新运行状态(f"倒计时 {self._倒计时}...")
         else:
             # 倒计时结束，开始运行
             if self._倒计时定时器:
@@ -967,24 +721,28 @@ class 运行页(QWidget):
             
             self._运行中 = True
             self._已暂停 = False
-            self._状态监控.更新运行状态("运行中")
+            self._运行状态卡片.更新运行状态("运行中")
             
             # 发送启动运行信号
-            子模式 = self._控制面板.获取子模式()
-            运行模式 = self._控制面板.获取运行模式()
-            是否增强 = self._控制面板.是否增强模式()
+            子模式 = self._运行模式卡片.获取子模式()
+            运行模式 = self._运行模式卡片.获取运行模式()
+            是否增强 = self._运行模式卡片.是否增强模式()
+            
+            self._运行日志卡片.添加日志(f"启动运行 - 模式: {运行模式}, 任务: {子模式}", "success")
             self.启动运行.emit(子模式, 运行模式, 是否增强)
     
     def _处理暂停(self) -> None:
         """处理暂停/继续"""
         if self._运行中:
             self._已暂停 = not self._已暂停
-            self._控制面板.设置运行状态(True, self._已暂停)
+            self._运行模式卡片.设置运行状态(True, self._已暂停)
             
             if self._已暂停:
-                self._状态监控.更新运行状态("已暂停")
+                self._运行状态卡片.更新运行状态("已暂停")
+                self._运行日志卡片.添加日志("运行已暂停", "warning")
             else:
-                self._状态监控.更新运行状态("运行中")
+                self._运行状态卡片.更新运行状态("运行中")
+                self._运行日志卡片.添加日志("运行已继续", "info")
             
             self.暂停运行.emit()
     
@@ -999,18 +757,18 @@ class 运行页(QWidget):
         self._已暂停 = False
         self._倒计时 = 0
         
-        self._控制面板.设置运行状态(False, False)
-        self._状态监控.重置()
-        self._增强模块状态.重置()
-        self._自动调参面板.重置()
+        self._运行模式卡片.设置运行状态(False, False)
+        self._运行状态卡片.重置()
+        self._增强模块状态卡片.重置()
         self._脱困提示.隐藏提示()
         
+        self._运行日志卡片.添加日志("运行已停止", "info")
         self.停止运行.emit()
-    
+
     @Slot(dict)
     def 更新状态(self, 状态数据: dict) -> None:
         """
-        更新状态显示
+        更新状态显示（通过节流器）
         
         参数:
             状态数据: 包含状态信息的字典
@@ -1019,29 +777,40 @@ class 运行页(QWidget):
                 - 游戏状态: str
                 - 帧率: float
                 - 运动量: float
-                - 增强模块: dict (YOLO/状态识别/决策引擎/低性能)
+                - 增强模块: dict (YOLO/状态识别/决策引擎/脱困/自动调参/低性能)
+        """
+        # 使用节流器控制更新频率
+        self._状态节流器.请求更新(状态数据)
+    
+    def _执行状态更新(self, 状态数据: dict) -> None:
+        """
+        实际执行状态更新（由节流器调用）
+        
+        参数:
+            状态数据: 包含状态信息的字典
         """
         if "当前动作" in 状态数据:
-            self._状态监控.更新当前动作(状态数据["当前动作"])
+            self._运行状态卡片.更新当前动作(状态数据["当前动作"])
         
         if "动作来源" in 状态数据:
-            self._状态监控.更新动作来源(状态数据["动作来源"])
+            self._运行状态卡片.更新动作来源(状态数据["动作来源"])
         
         if "游戏状态" in 状态数据:
-            self._状态监控.更新游戏状态(状态数据["游戏状态"])
+            self._运行状态卡片.更新游戏状态(状态数据["游戏状态"])
         
         if "帧率" in 状态数据:
-            self._状态监控.更新帧率(状态数据["帧率"])
+            self._运行状态卡片.更新帧率(状态数据["帧率"])
         
         if "运动量" in 状态数据:
-            self._状态监控.更新运动量(状态数据["运动量"])
+            self._运行状态卡片.更新运动量(状态数据["运动量"])
         
         if "增强模块" in 状态数据:
-            self._增强模块状态.更新模块状态(状态数据["增强模块"])
+            self._增强模块状态卡片.更新模块状态(状态数据["增强模块"])
     
     def 显示脱困提示(self, 消息: str = None) -> None:
         """显示脱困提示"""
         self._脱困提示.显示提示(消息)
+        self._运行日志卡片.添加日志(消息 or "检测到角色可能卡住，正在执行脱困动作...", "warning")
         
         # 3秒后自动隐藏
         QTimer.singleShot(3000, self._脱困提示.隐藏提示)
@@ -1052,14 +821,19 @@ class 运行页(QWidget):
         self._脱困提示.setStyleSheet(f"""
             QFrame {{
                 background-color: {颜色.错误};
-                border-radius: 8px;
+                border-radius: {布局常量.卡片圆角}px;
                 border: none;
             }}
         """)
         self._脱困提示.show()
+        self._运行日志卡片.添加日志(f"性能警告: 帧率 {帧率:.1f} FPS", "error")
         
         # 5秒后自动隐藏
         QTimer.singleShot(5000, self._脱困提示.隐藏提示)
+    
+    def 添加日志(self, 消息: str, 级别: str = "info") -> None:
+        """添加运行日志"""
+        self._运行日志卡片.添加日志(消息, 级别)
     
     def 处理快捷键暂停(self) -> None:
         """处理快捷键T暂停/继续"""
@@ -1078,19 +852,38 @@ class 运行页(QWidget):
     def 是否已暂停(self) -> bool:
         """返回是否已暂停"""
         return self._已暂停
+
+    def 获取运行模式卡片(self) -> 运行模式卡片:
+        """获取运行模式卡片组件"""
+        return self._运行模式卡片
     
-    def 获取控制面板(self) -> 运行控制面板:
-        """获取控制面板组件"""
-        return self._控制面板
+    def 获取运行状态卡片(self) -> 运行状态卡片:
+        """获取运行状态卡片组件"""
+        return self._运行状态卡片
     
-    def 获取状态监控(self) -> 运行状态监控:
-        """获取状态监控组件"""
-        return self._状态监控
+    def 获取增强模块状态卡片(self) -> 增强模块状态卡片:
+        """获取增强模块状态卡片组件"""
+        return self._增强模块状态卡片
     
-    def 获取增强模块状态(self) -> 增强模块状态:
-        """获取增强模块状态组件"""
-        return self._增强模块状态
+    def 获取运行日志卡片(self) -> 运行日志卡片:
+        """获取运行日志卡片组件"""
+        return self._运行日志卡片
     
-    def 获取自动调参面板(self) -> 自动调参面板:
-        """获取自动调参面板组件"""
-        return self._自动调参面板
+    # 兼容旧接口
+    def 获取控制面板(self):
+        """获取控制面板组件（兼容旧接口）"""
+        return self._运行模式卡片
+    
+    def 获取状态监控(self):
+        """获取状态监控组件（兼容旧接口）"""
+        return self._运行状态卡片
+    
+    def 获取增强模块状态(self):
+        """获取增强模块状态组件（兼容旧接口）"""
+        return self._增强模块状态卡片
+
+
+# 兼容旧代码的别名
+运行控制面板 = 运行模式卡片
+运行状态监控 = 运行状态卡片
+增强模块状态 = 增强模块状态卡片

@@ -103,5 +103,89 @@
     "state_accuracy": 0.8,
     "stuck_count": 1,
     "task_efficiency": 0.6933333333333334
+  },
+  {
+    "timestamp": "2026-01-02T23:02:45.311847",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T23:02:45.315893",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T23:02:45.315893",
+    "action_success_rate": 0.6666666666666666,
+    "state_accuracy": 0.8,
+    "stuck_count": 1,
+    "task_efficiency": 0.6933333333333334
+  },
+  {
+    "timestamp": "2026-01-02T23:15:41.812909",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T23:15:41.813910",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T23:15:41.814910",
+    "action_success_rate": 0.6666666666666666,
+    "state_accuracy": 0.8,
+    "stuck_count": 1,
+    "task_efficiency": 0.6933333333333334
+  },
+  {
+    "timestamp": "2026-01-02T23:17:32.981955",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T23:17:32.983955",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T23:17:32.984955",
+    "action_success_rate": 0.6666666666666666,
+    "state_accuracy": 0.8,
+    "stuck_count": 1,
+    "task_efficiency": 0.6933333333333334
+  },
+  {
+    "timestamp": "2026-01-02T23:21:15.844888",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T23:21:15.846887",
+    "action_success_rate": 1.0,
+    "state_accuracy": 0.8,
+    "stuck_count": 0,
+    "task_efficiency": 0.9600000000000001
+  },
+  {
+    "timestamp": "2026-01-02T23:21:15.847887",
+    "action_success_rate": 0.6666666666666666,
+    "state_accuracy": 0.8,
+    "stuck_count": 1,
+    "task_efficiency": 0.6933333333333334
   }
 ]

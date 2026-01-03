@@ -3,6 +3,9 @@
 数据收集页面
 
 提供数据收集功能的图形界面，包括控制面板、状态监控、游戏画面预览和智能录制控制。
+
+性能优化:
+- 使用状态更新节流器，最小更新间隔50ms
 """
 
 from typing import Optional, Dict, Any
@@ -17,10 +20,15 @@ from PySide6.QtCore import Signal, Slot, Qt, QTimer
 from PySide6.QtGui import QImage, QPixmap
 
 from 界面.样式.主题 import 颜色
+from 界面.组件.性能优化 import 状态更新节流器
 
 
 class 控制面板(QFrame):
-    """数据收集控制面板组件"""
+    """
+    数据收集控制面板组件
+    
+    Requirements 2.2: 控制面板卡片位于左栏顶部，包含训练模式选择和控制按钮
+    """
     
     # 信号定义
     开始点击 = Signal()
@@ -31,6 +39,11 @@ class 控制面板(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setProperty("class", "card")
+        
+        # 导入布局常量
+        from 界面.样式.布局常量 import 布局常量
+        self._布局常量 = 布局常量
+        
         self._初始化界面()
     
     def _初始化界面(self) -> None:
@@ -38,19 +51,24 @@ class 控制面板(QFrame):
         self.setStyleSheet(f"""
             QFrame {{
                 background-color: {颜色.卡片背景};
-                border-radius: 12px;
-                border: 1px solid {颜色.边框};
+                border-radius: {self._布局常量.卡片圆角}px;
+                border: {self._布局常量.卡片边框宽度}px solid {颜色.边框};
             }}
         """)
         
         布局 = QVBoxLayout(self)
-        布局.setContentsMargins(20, 16, 20, 16)
-        布局.setSpacing(16)
+        布局.setContentsMargins(
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距
+        )
+        布局.setSpacing(self._布局常量.卡片间距)
         
         # 标题
         标题 = QLabel("🎮 控制面板")
         标题.setStyleSheet(f"""
-            font-size: 16px;
+            font-size: {self._布局常量.卡片标题字号}px;
             font-weight: bold;
             color: {颜色.标题};
         """)
@@ -60,15 +78,19 @@ class 控制面板(QFrame):
         模式容器 = QWidget()
         模式布局 = QHBoxLayout(模式容器)
         模式布局.setContentsMargins(0, 0, 0, 0)
-        模式布局.setSpacing(12)
+        模式布局.setSpacing(self._布局常量.按钮间距)
         
         模式标签 = QLabel("训练模式:")
-        模式标签.setStyleSheet(f"color: {颜色.文字}; font-size: 13px;")
+        模式标签.setStyleSheet(f"""
+            color: {颜色.文字}; 
+            font-size: {self._布局常量.正文字号}px;
+        """)
         模式布局.addWidget(模式标签)
         
         self._模式选择 = QComboBox()
         self._模式选择.addItems(["主线任务", "自动战斗", "通用模式"])
-        self._模式选择.setFixedWidth(150)
+        self._模式选择.setFixedWidth(self._布局常量.下拉框最小宽度)
+        self._模式选择.setFixedHeight(self._布局常量.下拉框高度)
         self._模式选择.currentTextChanged.connect(self.模式改变.emit)
         模式布局.addWidget(self._模式选择)
         模式布局.addStretch()
@@ -79,21 +101,23 @@ class 控制面板(QFrame):
         按钮容器 = QWidget()
         按钮布局 = QHBoxLayout(按钮容器)
         按钮布局.setContentsMargins(0, 0, 0, 0)
-        按钮布局.setSpacing(12)
+        按钮布局.setSpacing(self._布局常量.按钮间距)
         
         # 开始按钮
-        self._开始按钮 = QPushButton("▶️ 开始录制")
-        self._开始按钮.setFixedHeight(40)
+        self._开始按钮 = QPushButton("开始")
+        self._开始按钮.setFixedSize(
+            self._布局常量.按钮最小宽度 + 10,  # 70px
+            self._布局常量.按钮高度
+        )
         self._开始按钮.setCursor(Qt.PointingHandCursor)
         self._开始按钮.setStyleSheet(f"""
             QPushButton {{
                 background-color: {颜色.成功};
                 color: white;
                 border: none;
-                border-radius: 8px;
-                font-size: 14px;
+                border-radius: {self._布局常量.按钮圆角}px;
+                font-size: {self._布局常量.按钮文字字号}px;
                 font-weight: 500;
-                padding: 0 20px;
             }}
             QPushButton:hover {{
                 background-color: #059669;
@@ -107,8 +131,11 @@ class 控制面板(QFrame):
         按钮布局.addWidget(self._开始按钮)
         
         # 暂停按钮
-        self._暂停按钮 = QPushButton("⏸️ 暂停")
-        self._暂停按钮.setFixedHeight(40)
+        self._暂停按钮 = QPushButton("暂停")
+        self._暂停按钮.setFixedSize(
+            self._布局常量.按钮最小宽度,
+            self._布局常量.按钮高度
+        )
         self._暂停按钮.setCursor(Qt.PointingHandCursor)
         self._暂停按钮.setEnabled(False)
         self._暂停按钮.setStyleSheet(f"""
@@ -116,10 +143,9 @@ class 控制面板(QFrame):
                 background-color: {颜色.警告};
                 color: white;
                 border: none;
-                border-radius: 8px;
-                font-size: 14px;
+                border-radius: {self._布局常量.按钮圆角}px;
+                font-size: {self._布局常量.按钮文字字号}px;
                 font-weight: 500;
-                padding: 0 20px;
             }}
             QPushButton:hover {{
                 background-color: #D97706;
@@ -133,8 +159,11 @@ class 控制面板(QFrame):
         按钮布局.addWidget(self._暂停按钮)
         
         # 停止按钮
-        self._停止按钮 = QPushButton("⏹️ 停止")
-        self._停止按钮.setFixedHeight(40)
+        self._停止按钮 = QPushButton("停止")
+        self._停止按钮.setFixedSize(
+            self._布局常量.按钮最小宽度,
+            self._布局常量.按钮高度
+        )
         self._停止按钮.setCursor(Qt.PointingHandCursor)
         self._停止按钮.setEnabled(False)
         self._停止按钮.setStyleSheet(f"""
@@ -142,10 +171,9 @@ class 控制面板(QFrame):
                 background-color: {颜色.错误};
                 color: white;
                 border: none;
-                border-radius: 8px;
-                font-size: 14px;
+                border-radius: {self._布局常量.按钮圆角}px;
+                font-size: {self._布局常量.按钮文字字号}px;
                 font-weight: 500;
-                padding: 0 20px;
             }}
             QPushButton:hover {{
                 background-color: #DC2626;
@@ -162,8 +190,11 @@ class 控制面板(QFrame):
         布局.addWidget(按钮容器)
         
         # 快捷键提示
-        提示 = QLabel("💡 快捷键: T 暂停/继续, ESC 停止")
-        提示.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px;")
+        提示 = QLabel("💡 T暂停/继续, ESC停止")
+        提示.setStyleSheet(f"""
+            color: {颜色.次要文字}; 
+            font-size: {self._布局常量.次要文字字号}px;
+        """)
         布局.addWidget(提示)
     
     def 设置录制状态(self, 录制中: bool, 已暂停: bool = False) -> None:
@@ -175,9 +206,9 @@ class 控制面板(QFrame):
         
         if 录制中:
             if 已暂停:
-                self._暂停按钮.setText("▶️ 继续")
+                self._暂停按钮.setText("继续")
             else:
-                self._暂停按钮.setText("⏸️ 暂停")
+                self._暂停按钮.setText("暂停")
     
     def 获取当前模式(self) -> str:
         """获取当前选择的训练模式"""
@@ -185,11 +216,20 @@ class 控制面板(QFrame):
 
 
 class 状态监控(QFrame):
-    """数据收集状态监控组件"""
+    """
+    数据收集状态监控组件
+    
+    Requirements 2.3: 状态监控卡片位于左栏中部，显示录制状态和样本统计
+    """
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setProperty("class", "card")
+        
+        # 导入布局常量
+        from 界面.样式.布局常量 import 布局常量
+        self._布局常量 = 布局常量
+        
         self._初始化界面()
     
     def _初始化界面(self) -> None:
@@ -197,19 +237,24 @@ class 状态监控(QFrame):
         self.setStyleSheet(f"""
             QFrame {{
                 background-color: {颜色.卡片背景};
-                border-radius: 12px;
-                border: 1px solid {颜色.边框};
+                border-radius: {self._布局常量.卡片圆角}px;
+                border: {self._布局常量.卡片边框宽度}px solid {颜色.边框};
             }}
         """)
         
         布局 = QVBoxLayout(self)
-        布局.setContentsMargins(20, 16, 20, 16)
-        布局.setSpacing(12)
+        布局.setContentsMargins(
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距
+        )
+        布局.setSpacing(self._布局常量.表单行间距 + 2)
         
         # 标题
         标题 = QLabel("📊 状态监控")
         标题.setStyleSheet(f"""
-            font-size: 16px;
+            font-size: {self._布局常量.卡片标题字号}px;
             font-weight: bold;
             color: {颜色.标题};
         """)
@@ -217,7 +262,7 @@ class 状态监控(QFrame):
         
         # 状态网格
         状态网格 = QGridLayout()
-        状态网格.setSpacing(16)
+        状态网格.setSpacing(self._布局常量.按钮间距)
         
         # 录制状态
         self._录制状态标签 = self._创建状态项("录制状态:", "已停止", 状态网格, 0, 0)
@@ -242,14 +287,21 @@ class 状态监控(QFrame):
         容器 = QWidget()
         容器布局 = QHBoxLayout(容器)
         容器布局.setContentsMargins(0, 0, 0, 0)
-        容器布局.setSpacing(8)
+        容器布局.setSpacing(4)
         
         标题标签 = QLabel(标题)
-        标题标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 13px;")
+        标题标签.setStyleSheet(f"""
+            color: {颜色.次要文字}; 
+            font-size: {self._布局常量.状态标签字号}px;
+        """)
         容器布局.addWidget(标题标签)
         
         值标签 = QLabel(初始值)
-        值标签.setStyleSheet(f"color: {颜色.文字}; font-size: 13px; font-weight: 500;")
+        值标签.setStyleSheet(f"""
+            color: {颜色.文字}; 
+            font-size: {self._布局常量.状态标签字号}px; 
+            font-weight: 500;
+        """)
         容器布局.addWidget(值标签)
         容器布局.addStretch()
         
@@ -266,7 +318,11 @@ class 状态监控(QFrame):
         }
         状态颜色 = 颜色映射.get(状态, 颜色.文字)
         self._录制状态标签.setText(状态)
-        self._录制状态标签.setStyleSheet(f"color: {状态颜色}; font-size: 13px; font-weight: 500;")
+        self._录制状态标签.setStyleSheet(f"""
+            color: {状态颜色}; 
+            font-size: {self._布局常量.状态标签字号}px; 
+            font-weight: 500;
+        """)
     
     def 更新样本数量(self, 数量: int) -> None:
         """更新样本数量显示"""
@@ -286,11 +342,22 @@ class 状态监控(QFrame):
 
 
 class 画面预览(QFrame):
-    """游戏画面预览组件"""
+    """
+    游戏画面预览组件
+    
+    Requirements 2.5: 游戏画面预览卡片位于右栏底部，保持16:9宽高比
+    Requirements 2.7: 预览区域无内容时显示占位提示文字
+    """
     
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setProperty("class", "card")
+        
+        # 导入布局常量
+        from 界面.样式.布局常量 import 布局常量, 计算预览区域尺寸
+        self._布局常量 = 布局常量
+        self._计算预览区域尺寸 = 计算预览区域尺寸
+        
         self._初始化界面()
     
     def _初始化界面(self) -> None:
@@ -298,36 +365,98 @@ class 画面预览(QFrame):
         self.setStyleSheet(f"""
             QFrame {{
                 background-color: {颜色.卡片背景};
-                border-radius: 12px;
-                border: 1px solid {颜色.边框};
+                border-radius: {self._布局常量.卡片圆角}px;
+                border: {self._布局常量.卡片边框宽度}px solid {颜色.边框};
             }}
         """)
         
         布局 = QVBoxLayout(self)
-        布局.setContentsMargins(16, 12, 16, 12)
-        布局.setSpacing(8)
+        布局.setContentsMargins(
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距
+        )
+        布局.setSpacing(self._布局常量.标题下边距)
         
         # 标题
         标题 = QLabel("🖥️ 游戏画面预览")
         标题.setStyleSheet(f"""
-            font-size: 14px;
+            font-size: {self._布局常量.卡片标题字号}px;
             font-weight: bold;
             color: {颜色.标题};
         """)
         布局.addWidget(标题)
         
-        # 预览区域
+        # 预览区域容器 - 保持16:9宽高比 (Requirements 2.5)
+        self._预览容器 = QWidget()
+        self._预览容器.setMinimumSize(
+            self._布局常量.预览区域宽度最小,
+            self._布局常量.预览区域高度最小
+        )
+        
+        预览容器布局 = QVBoxLayout(self._预览容器)
+        预览容器布局.setContentsMargins(0, 0, 0, 0)
+        预览容器布局.setSpacing(0)
+        
+        # 预览标签
         self._预览标签 = QLabel()
-        self._预览标签.setFixedSize(280, 160)
         self._预览标签.setAlignment(Qt.AlignCenter)
         self._预览标签.setStyleSheet(f"""
             background-color: #1E293B;
-            border-radius: 8px;
+            border-radius: {self._布局常量.卡片圆角}px;
             color: {颜色.次要文字};
-            font-size: 12px;
+            font-size: {self._布局常量.正文字号}px;
         """)
+        # 设置占位提示文字 (Requirements 2.7)
         self._预览标签.setText("等待录制开始...")
-        布局.addWidget(self._预览标签, alignment=Qt.AlignCenter)
+        
+        预览容器布局.addWidget(self._预览标签)
+        
+        布局.addWidget(self._预览容器, 1, Qt.AlignCenter)
+    
+    def resizeEvent(self, event) -> None:
+        """
+        处理尺寸变化事件，保持16:9宽高比
+        
+        Requirements 2.5: 预览区域保持16:9宽高比
+        """
+        super().resizeEvent(event)
+        self._更新预览区域尺寸()
+    
+    def _更新预览区域尺寸(self) -> None:
+        """
+        更新预览区域尺寸，保持16:9宽高比
+        
+        Requirements 2.5: 预览区域保持16:9宽高比
+        """
+        # 获取可用宽度（减去内边距）
+        可用宽度 = self.width() - self._布局常量.卡片内边距 * 2
+        可用高度 = self.height() - self._布局常量.卡片内边距 * 2 - 30  # 减去标题高度
+        
+        # 计算保持16:9比例的尺寸
+        宽高比 = self._布局常量.预览区域宽高比
+        
+        # 根据可用空间计算最佳尺寸
+        if 可用宽度 / 宽高比 <= 可用高度:
+            # 宽度受限
+            预览宽度 = 可用宽度
+            预览高度 = int(可用宽度 / 宽高比)
+        else:
+            # 高度受限
+            预览高度 = 可用高度
+            预览宽度 = int(可用高度 * 宽高比)
+        
+        # 限制在最小和最大范围内
+        预览宽度 = max(self._布局常量.预览区域宽度最小, 
+                      min(预览宽度, self._布局常量.预览区域宽度最大))
+        预览高度 = max(self._布局常量.预览区域高度最小,
+                      min(预览高度, self._布局常量.预览区域高度最大))
+        
+        # 确保保持16:9比例
+        预览高度 = int(预览宽度 / 宽高比)
+        
+        self._预览标签.setFixedSize(预览宽度, 预览高度)
     
     def 更新预览(self, 图像: np.ndarray) -> None:
         """
@@ -343,10 +472,14 @@ class 画面预览(QFrame):
             # 转换为QImage
             q图像 = QImage(图像.data, 宽度, 高度, 字节数, QImage.Format_RGB888)
             
-            # 缩放到预览尺寸
+            # 获取当前预览标签尺寸
+            预览宽度 = self._预览标签.width()
+            预览高度 = self._预览标签.height()
+            
+            # 缩放到预览尺寸，保持16:9比例
             像素图 = QPixmap.fromImage(q图像)
             缩放像素图 = 像素图.scaled(
-                280, 160, 
+                预览宽度, 预览高度, 
                 Qt.KeepAspectRatio, 
                 Qt.SmoothTransformation
             )
@@ -356,16 +489,38 @@ class 画面预览(QFrame):
             self._预览标签.setText(f"预览错误: {str(e)}")
     
     def 清除预览(self) -> None:
-        """清除预览图像"""
+        """
+        清除预览图像
+        
+        Requirements 2.7: 预览区域无内容时显示占位提示文字
+        """
         self._预览标签.clear()
         self._预览标签.setText("等待录制开始...")
+    
+    def 获取预览尺寸(self) -> tuple:
+        """
+        获取当前预览区域尺寸
+        
+        返回:
+            (宽度, 高度) 元组
+        """
+        return (self._预览标签.width(), self._预览标签.height())
+    
+    def 获取宽高比(self) -> float:
+        """
+        获取预览区域宽高比
+        
+        返回:
+            宽高比值 (16:9 = 1.778)
+        """
+        return self._布局常量.预览区域宽高比
 
 
 class 智能录制面板(QFrame):
     """智能录制控制面板组件
     
     显示实时价值评分和过滤选项控件。
-    需求: 2.6, 3.1
+    Requirements 2.4: 智能录制卡片位于右栏顶部，显示价值评分和等级统计
     """
     
     # 信号定义
@@ -374,6 +529,11 @@ class 智能录制面板(QFrame):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setProperty("class", "card")
+        
+        # 导入布局常量
+        from 界面.样式.布局常量 import 布局常量
+        self._布局常量 = 布局常量
+        
         self._初始化界面()
     
     def _初始化界面(self) -> None:
@@ -381,25 +541,30 @@ class 智能录制面板(QFrame):
         self.setStyleSheet(f"""
             QFrame {{
                 background-color: {颜色.卡片背景};
-                border-radius: 12px;
-                border: 1px solid {颜色.边框};
+                border-radius: {self._布局常量.卡片圆角}px;
+                border: {self._布局常量.卡片边框宽度}px solid {颜色.边框};
             }}
         """)
         
         布局 = QVBoxLayout(self)
-        布局.setContentsMargins(16, 12, 16, 12)
-        布局.setSpacing(10)
+        布局.setContentsMargins(
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距
+        )
+        布局.setSpacing(self._布局常量.表单行间距 + 2)
         
         # 标题
         标题 = QLabel("🎯 智能录制")
         标题.setStyleSheet(f"""
-            font-size: 14px;
+            font-size: {self._布局常量.卡片标题字号}px;
             font-weight: bold;
             color: {颜色.标题};
         """)
         布局.addWidget(标题)
         
-        # 实时价值评分显示 (需求 3.1)
+        # 实时价值评分显示
         评分容器 = QWidget()
         评分布局 = QVBoxLayout(评分容器)
         评分布局.setContentsMargins(0, 0, 0, 0)
@@ -410,11 +575,18 @@ class 智能录制面板(QFrame):
         评分标题布局.setContentsMargins(0, 0, 0, 0)
         
         评分标签 = QLabel("当前价值评分:")
-        评分标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px;")
+        评分标签.setStyleSheet(f"""
+            color: {颜色.次要文字}; 
+            font-size: {self._布局常量.正文字号}px;
+        """)
         评分标题布局.addWidget(评分标签)
         
         self._评分值标签 = QLabel("--")
-        self._评分值标签.setStyleSheet(f"color: {颜色.文字}; font-size: 14px; font-weight: bold;")
+        self._评分值标签.setStyleSheet(f"""
+            color: {颜色.文字}; 
+            font-size: {self._布局常量.卡片标题字号 + 1}px; 
+            font-weight: bold;
+        """)
         评分标题布局.addWidget(self._评分值标签)
         评分标题布局.addStretch()
         
@@ -424,16 +596,16 @@ class 智能录制面板(QFrame):
         self._评分进度条 = QProgressBar()
         self._评分进度条.setRange(0, 100)
         self._评分进度条.setValue(0)
-        self._评分进度条.setFixedHeight(8)
+        self._评分进度条.setFixedHeight(self._布局常量.进度条高度最大)
         self._评分进度条.setTextVisible(False)
         self._评分进度条.setStyleSheet(f"""
             QProgressBar {{
                 border: none;
-                border-radius: 4px;
+                border-radius: {self._布局常量.进度条圆角}px;
                 background-color: {颜色.边框};
             }}
             QProgressBar::chunk {{
-                border-radius: 4px;
+                border-radius: {self._布局常量.进度条圆角}px;
                 background-color: {颜色.成功};
             }}
         """)
@@ -441,7 +613,10 @@ class 智能录制面板(QFrame):
         
         # 价值等级标签
         self._价值等级标签 = QLabel("等级: --")
-        self._价值等级标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        self._价值等级标签.setStyleSheet(f"""
+            color: {颜色.次要文字}; 
+            font-size: {self._布局常量.状态标签字号}px;
+        """)
         评分布局.addWidget(self._价值等级标签)
         
         布局.addWidget(评分容器)
@@ -461,38 +636,66 @@ class 智能录制面板(QFrame):
         
         # 高价值片段
         高价值标签 = QLabel("🟢 高价值:")
-        高价值标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        高价值标签.setStyleSheet(f"""
+            color: {颜色.次要文字}; 
+            font-size: {self._布局常量.状态标签字号}px;
+        """)
         统计布局.addWidget(高价值标签, 0, 0)
         
         self._高价值数量 = QLabel("0")
-        self._高价值数量.setStyleSheet(f"color: {颜色.成功}; font-size: 12px; font-weight: 500;")
+        self._高价值数量.setStyleSheet(f"""
+            color: {颜色.成功}; 
+            font-size: {self._布局常量.正文字号}px; 
+            font-weight: 500;
+        """)
         统计布局.addWidget(self._高价值数量, 0, 1)
         
         # 中价值片段
         中价值标签 = QLabel("🟡 中价值:")
-        中价值标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        中价值标签.setStyleSheet(f"""
+            color: {颜色.次要文字}; 
+            font-size: {self._布局常量.状态标签字号}px;
+        """)
         统计布局.addWidget(中价值标签, 0, 2)
         
         self._中价值数量 = QLabel("0")
-        self._中价值数量.setStyleSheet(f"color: {颜色.警告}; font-size: 12px; font-weight: 500;")
+        self._中价值数量.setStyleSheet(f"""
+            color: {颜色.警告}; 
+            font-size: {self._布局常量.正文字号}px; 
+            font-weight: 500;
+        """)
         统计布局.addWidget(self._中价值数量, 0, 3)
         
         # 低价值片段
         低价值标签 = QLabel("🔴 低价值:")
-        低价值标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        低价值标签.setStyleSheet(f"""
+            color: {颜色.次要文字}; 
+            font-size: {self._布局常量.状态标签字号}px;
+        """)
         统计布局.addWidget(低价值标签, 1, 0)
         
         self._低价值数量 = QLabel("0")
-        self._低价值数量.setStyleSheet(f"color: {颜色.错误}; font-size: 12px; font-weight: 500;")
+        self._低价值数量.setStyleSheet(f"""
+            color: {颜色.错误}; 
+            font-size: {self._布局常量.正文字号}px; 
+            font-weight: 500;
+        """)
         统计布局.addWidget(self._低价值数量, 1, 1)
         
         # 总片段数
         总数标签 = QLabel("📊 总计:")
-        总数标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        总数标签.setStyleSheet(f"""
+            color: {颜色.次要文字}; 
+            font-size: {self._布局常量.状态标签字号}px;
+        """)
         统计布局.addWidget(总数标签, 1, 2)
         
         self._总片段数量 = QLabel("0")
-        self._总片段数量.setStyleSheet(f"color: {颜色.文字}; font-size: 12px; font-weight: 500;")
+        self._总片段数量.setStyleSheet(f"""
+            color: {颜色.文字}; 
+            font-size: {self._布局常量.正文字号}px; 
+            font-weight: 500;
+        """)
         统计布局.addWidget(self._总片段数量, 1, 3)
         
         布局.addWidget(统计容器)
@@ -504,23 +707,26 @@ class 智能录制面板(QFrame):
         分隔线2.setFixedHeight(1)
         布局.addWidget(分隔线2)
         
-        # 过滤选项 (需求 2.6)
+        # 过滤选项
         过滤容器 = QWidget()
         过滤布局 = QVBoxLayout(过滤容器)
         过滤布局.setContentsMargins(0, 0, 0, 0)
         过滤布局.setSpacing(6)
         
         过滤标签 = QLabel("保存选项:")
-        过滤标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 12px;")
+        过滤标签.setStyleSheet(f"""
+            color: {颜色.次要文字}; 
+            font-size: {self._布局常量.正文字号}px;
+        """)
         过滤布局.addWidget(过滤标签)
         
         self._过滤选择 = QComboBox()
         self._过滤选择.addItems(["保留全部", "仅保留高价值", "自动过滤低价值"])
-        self._过滤选择.setFixedHeight(28)
+        self._过滤选择.setFixedHeight(self._布局常量.下拉框高度)
         self._过滤选择.setStyleSheet(f"""
             QComboBox {{
                 padding: 4px 8px;
-                font-size: 12px;
+                font-size: {self._布局常量.正文字号}px;
             }}
         """)
         self._过滤选择.currentTextChanged.connect(self.过滤选项改变.emit)
@@ -530,8 +736,6 @@ class 智能录制面板(QFrame):
     
     def 更新价值评分(self, 评分: float) -> None:
         """更新实时价值评分显示
-        
-        需求 3.1: 实时显示当前片段的Value_Score
         
         Args:
             评分: 价值评分 (0-100)
@@ -551,19 +755,26 @@ class 智能录制面板(QFrame):
             等级 = "低价值"
             颜色值 = 颜色.错误
         
-        self._评分值标签.setStyleSheet(f"color: {颜色值}; font-size: 14px; font-weight: bold;")
+        self._评分值标签.setStyleSheet(f"""
+            color: {颜色值}; 
+            font-size: {self._布局常量.卡片标题字号 + 1}px; 
+            font-weight: bold;
+        """)
         self._价值等级标签.setText(f"等级: {等级}")
-        self._价值等级标签.setStyleSheet(f"color: {颜色值}; font-size: 11px;")
+        self._价值等级标签.setStyleSheet(f"""
+            color: {颜色值}; 
+            font-size: {self._布局常量.状态标签字号}px;
+        """)
         
         # 更新进度条颜色
         self._评分进度条.setStyleSheet(f"""
             QProgressBar {{
                 border: none;
-                border-radius: 4px;
+                border-radius: {self._布局常量.进度条圆角}px;
                 background-color: {颜色.边框};
             }}
             QProgressBar::chunk {{
-                border-radius: 4px;
+                border-radius: {self._布局常量.进度条圆角}px;
                 background-color: {颜色值};
             }}
         """)
@@ -594,21 +805,28 @@ class 智能录制面板(QFrame):
     def 重置(self) -> None:
         """重置所有显示"""
         self._评分值标签.setText("--")
-        self._评分值标签.setStyleSheet(f"color: {颜色.文字}; font-size: 14px; font-weight: bold;")
+        self._评分值标签.setStyleSheet(f"""
+            color: {颜色.文字}; 
+            font-size: {self._布局常量.卡片标题字号 + 1}px; 
+            font-weight: bold;
+        """)
         self._评分进度条.setValue(0)
         self._评分进度条.setStyleSheet(f"""
             QProgressBar {{
                 border: none;
-                border-radius: 4px;
+                border-radius: {self._布局常量.进度条圆角}px;
                 background-color: {颜色.边框};
             }}
             QProgressBar::chunk {{
-                border-radius: 4px;
+                border-radius: {self._布局常量.进度条圆角}px;
                 background-color: {颜色.成功};
             }}
         """)
         self._价值等级标签.setText("等级: --")
-        self._价值等级标签.setStyleSheet(f"color: {颜色.次要文字}; font-size: 11px;")
+        self._价值等级标签.setStyleSheet(f"""
+            color: {颜色.次要文字}; 
+            font-size: {self._布局常量.状态标签字号}px;
+        """)
         self._高价值数量.setText("0")
         self._中价值数量.setText("0")
         self._低价值数量.setText("0")
@@ -621,6 +839,11 @@ class 数据收集页(QWidget):
     数据收集页面
     
     提供数据收集功能的完整界面，包括控制面板、状态监控、游戏画面预览和智能录制控制。
+    
+    布局结构 (Requirements 2.1-2.7):
+    - 左栏 (60%): 控制面板 + 状态监控
+    - 右栏 (40%): 智能录制面板 + 游戏画面预览
+    - 底部: 操作说明卡片（横跨整个宽度）
     """
     
     # 信号定义
@@ -632,81 +855,129 @@ class 数据收集页(QWidget):
         """初始化数据收集页面"""
         super().__init__(parent)
         
+        # 导入布局常量
+        from 界面.样式.布局常量 import 布局常量
+        self._布局常量 = 布局常量
+        
         # 状态
         self._录制中 = False
         self._已暂停 = False
         self._倒计时 = 0
         self._倒计时定时器: Optional[QTimer] = None
         
+        # 状态更新节流器（最小更新间隔50ms）
+        self._状态节流器 = 状态更新节流器(最小间隔ms=50, parent=self)
+        self._状态节流器.设置回调(self._执行状态更新)
+        
         self._初始化界面()
     
     def _初始化界面(self) -> None:
-        """初始化界面布局"""
+        """
+        初始化界面布局
+        
+        采用左右两栏布局 (Requirements 2.1):
+        - 左栏占60%宽度: 控制面板 + 状态监控
+        - 右栏占40%宽度: 智能录制面板 + 游戏画面预览
+        - 底部: 操作说明卡片
+        """
         主布局 = QVBoxLayout(self)
-        主布局.setContentsMargins(24, 24, 24, 24)
-        主布局.setSpacing(16)
+        主布局.setContentsMargins(
+            self._布局常量.内容区外边距,
+            self._布局常量.内容区外边距,
+            self._布局常量.内容区外边距,
+            self._布局常量.内容区外边距
+        )
+        主布局.setSpacing(self._布局常量.卡片间距)
         
         # 页面标题
         标题 = QLabel("🎥 数据收集")
         标题.setStyleSheet(f"""
-            font-size: 22px;
+            font-size: {self._布局常量.页面标题字号}px;
             font-weight: bold;
             color: {颜色.标题};
         """)
         主布局.addWidget(标题)
         
-        # 内容区域 (左右布局)
+        # 内容区域 - 左右两栏布局 (Requirements 2.1)
         内容容器 = QWidget()
         内容布局 = QHBoxLayout(内容容器)
         内容布局.setContentsMargins(0, 0, 0, 0)
-        内容布局.setSpacing(16)
+        内容布局.setSpacing(self._布局常量.卡片间距)
         
-        # 左侧: 控制面板和状态监控
-        左侧容器 = QWidget()
-        左侧布局 = QVBoxLayout(左侧容器)
-        左侧布局.setContentsMargins(0, 0, 0, 0)
-        左侧布局.setSpacing(12)
+        # 左栏 (60%) - 控制面板 + 状态监控 (Requirements 2.2, 2.3)
+        左栏 = QWidget()
+        左栏布局 = QVBoxLayout(左栏)
+        左栏布局.setContentsMargins(0, 0, 0, 0)
+        左栏布局.setSpacing(self._布局常量.卡片间距)
         
-        # 控制面板
+        # 控制面板 (Requirements 2.2)
         self._控制面板 = 控制面板()
         self._控制面板.开始点击.connect(self._处理开始)
         self._控制面板.暂停点击.connect(self._处理暂停)
         self._控制面板.停止点击.connect(self._处理停止)
-        左侧布局.addWidget(self._控制面板)
+        左栏布局.addWidget(self._控制面板)
         
-        # 状态监控
+        # 状态监控 (Requirements 2.3)
         self._状态监控 = 状态监控()
-        左侧布局.addWidget(self._状态监控)
+        左栏布局.addWidget(self._状态监控)
         
-        左侧布局.addStretch()
-        内容布局.addWidget(左侧容器, 1)
+        左栏布局.addStretch()
         
-        # 中间: 智能录制面板
+        # 添加左栏，使用伸展因子60 (Requirements 2.1)
+        内容布局.addWidget(左栏, self._布局常量.数据收集页左栏比例)
+        
+        # 右栏 (40%) - 智能录制面板 + 游戏画面预览 (Requirements 2.4, 2.5)
+        右栏 = QWidget()
+        右栏布局 = QVBoxLayout(右栏)
+        右栏布局.setContentsMargins(0, 0, 0, 0)
+        右栏布局.setSpacing(self._布局常量.卡片间距)
+        
+        # 智能录制面板 (Requirements 2.4)
         self._智能录制面板 = 智能录制面板()
-        self._智能录制面板.setFixedWidth(200)
-        内容布局.addWidget(self._智能录制面板)
+        右栏布局.addWidget(self._智能录制面板)
         
-        # 右侧: 游戏画面预览
+        # 游戏画面预览 (Requirements 2.5)
         self._画面预览 = 画面预览()
-        内容布局.addWidget(self._画面预览)
+        右栏布局.addWidget(self._画面预览, 1)
+        
+        # 添加右栏，使用伸展因子40 (Requirements 2.1)
+        内容布局.addWidget(右栏, self._布局常量.数据收集页右栏比例)
         
         主布局.addWidget(内容容器, 1)
         
-        # 操作说明
+        # 操作说明卡片 - 横跨整个宽度 (Requirements 2.6)
+        说明卡片 = self._创建操作说明卡片()
+        主布局.addWidget(说明卡片)
+    
+    def _创建操作说明卡片(self) -> QFrame:
+        """
+        创建操作说明卡片
+        
+        Requirements 2.6: 操作说明卡片位于页面底部，横跨整个宽度
+        """
         说明卡片 = QFrame()
         说明卡片.setStyleSheet(f"""
             QFrame {{
                 background-color: {颜色.选中背景};
-                border-radius: 12px;
-                border: 1px solid {颜色.边框};
+                border-radius: {self._布局常量.卡片圆角}px;
+                border: {self._布局常量.卡片边框宽度}px solid {颜色.边框};
             }}
         """)
         说明布局 = QVBoxLayout(说明卡片)
-        说明布局.setContentsMargins(16, 12, 16, 12)
-        说明布局.setSpacing(8)
+        说明布局.setContentsMargins(
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距,
+            self._布局常量.卡片内边距
+        )
+        说明布局.setSpacing(self._布局常量.标题下边距)
         
         说明标题 = QLabel("📋 操作说明")
-        说明标题.setStyleSheet(f"color: {颜色.标题}; font-size: 14px; font-weight: 500;")
+        说明标题.setStyleSheet(f"""
+            color: {颜色.标题}; 
+            font-size: {self._布局常量.卡片标题字号}px; 
+            font-weight: bold;
+        """)
         说明布局.addWidget(说明标题)
         
         说明内容 = QLabel(
@@ -714,11 +985,14 @@ class 数据收集页(QWidget):
             "4. 进行游戏操作 → 5. 按T暂停/继续，ESC停止 | "
             "💡 智能录制会自动评估片段价值，可选择保存策略"
         )
-        说明内容.setStyleSheet(f"color: {颜色.文字}; font-size: 12px;")
+        说明内容.setStyleSheet(f"""
+            color: {颜色.文字}; 
+            font-size: {self._布局常量.正文字号}px;
+        """)
         说明内容.setWordWrap(True)
         说明布局.addWidget(说明内容)
         
-        主布局.addWidget(说明卡片)
+        return 说明卡片
     
     def _处理开始(self) -> None:
         """处理开始录制"""
@@ -786,7 +1060,7 @@ class 数据收集页(QWidget):
     @Slot(dict)
     def 更新状态(self, 状态数据: dict) -> None:
         """
-        更新状态显示
+        更新状态显示（通过节流器）
         
         参数:
             状态数据: 包含状态信息的字典
@@ -799,6 +1073,16 @@ class 数据收集页(QWidget):
                 - 高价值片段: int (可选) - 高价值片段数量
                 - 中价值片段: int (可选) - 中价值片段数量
                 - 低价值片段: int (可选) - 低价值片段数量
+        """
+        # 使用节流器控制更新频率
+        self._状态节流器.请求更新(状态数据)
+    
+    def _执行状态更新(self, 状态数据: dict) -> None:
+        """
+        实际执行状态更新（由节流器调用）
+        
+        参数:
+            状态数据: 包含状态信息的字典
         """
         if "样本数量" in 状态数据:
             self._状态监控.更新样本数量(状态数据["样本数量"])

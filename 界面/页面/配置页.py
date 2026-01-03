@@ -3,29 +3,37 @@
 配置页面
 
 提供图形化的配置管理界面，支持:
-- 分类显示配置项 (游戏窗口/模型/训练/增强模块)
+- 标签页形式组织配置项 (游戏窗口/模型设置/训练参数/增强模块)
 - 各类型输入控件 (滑块/输入框/下拉框/开关)
 - 配置说明文字
 - 保存和重置功能
 - 实时验证输入有效性
 - 多游戏配置档案管理 (需求 6.1, 6.3, 6.5)
+
+布局优化 (Requirements 5.1, 5.2, 5.3, 5.5):
+- 采用标签页形式组织不同类别的配置
+- 包含4个标签页：游戏窗口、模型设置、训练参数、增强模块
+- 每个标签页使用表单布局，标签在左，控件在右
+- 保存和重置按钮固定在页面底部
 """
 
 from PySide6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QScrollArea,
     QFrame, QLabel, QPushButton, QLineEdit, QSpinBox,
     QDoubleSpinBox, QComboBox, QCheckBox, QSlider,
-    QGroupBox, QFormLayout, QMessageBox, QSizePolicy,
-    QFileDialog, QInputDialog
+    QFormLayout, QMessageBox, QSizePolicy,
+    QFileDialog, QInputDialog, QTabWidget
 )
 from PySide6.QtCore import Qt, Signal
-from PySide6.QtGui import QIntValidator, QDoubleValidator
+from PySide6.QtGui import QFont
 
 from 界面.样式.主题 import 颜色
+from 界面.样式.布局常量 import 布局常量
+from 界面.组件.通用组件 import Card
 
 
 class 配置页(QWidget):
-    """配置管理页面"""
+    """配置管理页面 - 标签页形式布局"""
     
     # 信号定义
     配置已保存 = Signal()
@@ -51,161 +59,147 @@ class 配置页(QWidget):
             self._配置管理器 = None
     
     def _初始化界面(self):
-        """初始化界面布局"""
+        """初始化界面布局 - 标签页形式 (Requirements 5.1)"""
         主布局 = QVBoxLayout(self)
-        主布局.setContentsMargins(20, 20, 20, 20)
-        主布局.setSpacing(16)
+        主布局.setContentsMargins(
+            布局常量.内容区外边距,
+            布局常量.内容区外边距,
+            布局常量.内容区外边距,
+            布局常量.内容区外边距
+        )
+        主布局.setSpacing(布局常量.卡片间距)
         
-        # 标题区域
-        标题布局 = QHBoxLayout()
-        
+        # 页面标题
         标题 = QLabel("⚙️ 配置管理")
-        标题.setProperty("class", "title")
-        标题.setStyleSheet("font-size: 18px; font-weight: bold; color: #1E293B;")
-        标题布局.addWidget(标题)
-        
-        标题布局.addStretch()
-        
-        # 保存和重置按钮
-        self._重置按钮 = QPushButton("🔄 重置")
-        self._重置按钮.setProperty("class", "secondary")
-        self._重置按钮.setFixedWidth(80)
-        self._重置按钮.clicked.connect(self._重置配置)
-        标题布局.addWidget(self._重置按钮)
-        
-        self._保存按钮 = QPushButton("💾 保存")
-        self._保存按钮.setFixedWidth(80)
-        self._保存按钮.clicked.connect(self._保存配置)
-        标题布局.addWidget(self._保存按钮)
-        
-        主布局.addLayout(标题布局)
+        标题.setStyleSheet(f"""
+            font-size: {布局常量.页面标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+        """)
+        主布局.addWidget(标题)
         
         # 档案管理区域 (需求 6.1, 6.3, 6.5)
-        主布局.addWidget(self._创建档案管理组())
+        主布局.addWidget(self._创建档案管理卡片())
         
-        # 滚动区域
-        滚动区域 = QScrollArea()
-        滚动区域.setWidgetResizable(True)
-        滚动区域.setFrameShape(QFrame.NoFrame)
-        滚动区域.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
-        
-        # 滚动内容容器
-        滚动内容 = QWidget()
-        滚动布局 = QVBoxLayout(滚动内容)
-        滚动布局.setContentsMargins(0, 0, 10, 0)
-        滚动布局.setSpacing(16)
-        
-        # 添加各配置分组
-        滚动布局.addWidget(self._创建游戏窗口配置组())
-        滚动布局.addWidget(self._创建模型配置组())
-        滚动布局.addWidget(self._创建训练配置组())
-        滚动布局.addWidget(self._创建增强模块配置组())
-        
-        滚动布局.addStretch()
-        
-        滚动区域.setWidget(滚动内容)
-        主布局.addWidget(滚动区域)
-    
-    def _创建档案管理组(self) -> QFrame:
-        """创建档案管理分组 (需求 6.1, 6.3, 6.5)"""
-        卡片 = QFrame()
-        卡片.setProperty("class", "card")
-        卡片.setStyleSheet(f"""
-            QFrame[class="card"] {{
+        # 标签页容器 (Requirements 5.1, 5.2)
+        self._标签页 = QTabWidget()
+        self._标签页.setStyleSheet(f"""
+            QTabWidget::pane {{
+                border: {布局常量.卡片边框宽度}px solid {颜色.边框};
+                border-radius: {布局常量.卡片圆角}px;
                 background-color: {颜色.卡片背景};
-                border-radius: 12px;
+                padding: {布局常量.卡片内边距}px;
+            }}
+            QTabBar::tab {{
+                background-color: {颜色.卡片背景};
                 border: 1px solid {颜色.边框};
-                padding: 12px;
+                border-bottom: none;
+                border-top-left-radius: {布局常量.按钮圆角}px;
+                border-top-right-radius: {布局常量.按钮圆角}px;
+                padding: 8px 16px;
+                margin-right: 2px;
+                font-size: {布局常量.正文字号}px;
+                color: {颜色.文字};
+            }}
+            QTabBar::tab:selected {{
+                background-color: {颜色.主色};
+                color: white;
+                font-weight: bold;
+            }}
+            QTabBar::tab:hover:!selected {{
+                background-color: {颜色.悬停背景};
             }}
         """)
         
-        卡片布局 = QHBoxLayout(卡片)
-        卡片布局.setContentsMargins(16, 12, 16, 12)
-        卡片布局.setSpacing(12)
+        # 添加4个标签页 (Requirements 5.2)
+        self._标签页.addTab(self._创建游戏窗口标签页(), "🎮 游戏窗口")
+        self._标签页.addTab(self._创建模型设置标签页(), "🧠 模型设置")
+        self._标签页.addTab(self._创建训练参数标签页(), "📚 训练参数")
+        self._标签页.addTab(self._创建增强模块标签页(), "🚀 增强模块")
         
-        # 档案图标和标签
-        档案标签 = QLabel("📁 配置档案:")
-        档案标签.setStyleSheet(f"font-size: 14px; font-weight: 500; color: {颜色.标题};")
-        卡片布局.addWidget(档案标签)
+        主布局.addWidget(self._标签页, 1)
+        
+        # 底部按钮区域 (Requirements 5.5)
+        主布局.addWidget(self._创建底部按钮区域())
+    
+    def _创建档案管理卡片(self) -> Card:
+        """创建档案管理卡片 (需求 6.1, 6.3, 6.5)"""
+        卡片 = Card("📁 配置档案")
+        
+        # 档案管理布局
+        档案布局 = QHBoxLayout()
+        档案布局.setSpacing(布局常量.按钮间距)
         
         # 档案选择下拉框 (需求 6.1)
         self._档案选择 = QComboBox()
-        self._档案选择.setFixedWidth(180)
-        self._档案选择.setFixedHeight(32)
-        self._档案选择.setStyleSheet(f"""
-            QComboBox {{
-                padding-left: 10px;
-                font-size: 13px;
-            }}
-        """)
+        self._档案选择.setFixedWidth(160)
+        self._档案选择.setFixedHeight(布局常量.表单控件高度)
         self._档案选择.currentTextChanged.connect(self._切换档案)
-        卡片布局.addWidget(self._档案选择)
+        档案布局.addWidget(self._档案选择)
         
         # 新建档案按钮
         self._新建档案按钮 = QPushButton("➕ 新建")
-        self._新建档案按钮.setFixedSize(70, 32)
+        self._新建档案按钮.setFixedSize(70, 布局常量.按钮高度)
         self._新建档案按钮.setStyleSheet(f"""
             QPushButton {{
                 background-color: {颜色.成功};
                 color: white;
                 border: none;
-                border-radius: 6px;
-                font-size: 12px;
+                border-radius: {布局常量.按钮圆角}px;
+                font-size: {布局常量.按钮文字字号}px;
             }}
             QPushButton:hover {{
                 background-color: #059669;
             }}
         """)
         self._新建档案按钮.clicked.connect(self._新建档案)
-        卡片布局.addWidget(self._新建档案按钮)
+        档案布局.addWidget(self._新建档案按钮)
         
         # 导入按钮 (需求 6.5)
         self._导入按钮 = QPushButton("📥 导入")
-        self._导入按钮.setFixedSize(70, 32)
-        self._导入按钮.setProperty("class", "secondary")
+        self._导入按钮.setFixedSize(70, 布局常量.按钮高度)
         self._导入按钮.setStyleSheet(f"""
             QPushButton {{
                 background-color: {颜色.卡片背景};
                 color: {颜色.文字};
                 border: 1px solid {颜色.边框};
-                border-radius: 6px;
-                font-size: 12px;
+                border-radius: {布局常量.按钮圆角}px;
+                font-size: {布局常量.按钮文字字号}px;
             }}
             QPushButton:hover {{
                 background-color: {颜色.悬停背景};
             }}
         """)
         self._导入按钮.clicked.connect(self._导入档案)
-        卡片布局.addWidget(self._导入按钮)
+        档案布局.addWidget(self._导入按钮)
         
         # 导出按钮 (需求 6.3)
         self._导出按钮 = QPushButton("📤 导出")
-        self._导出按钮.setFixedSize(70, 32)
-        self._导出按钮.setProperty("class", "secondary")
+        self._导出按钮.setFixedSize(70, 布局常量.按钮高度)
         self._导出按钮.setStyleSheet(f"""
             QPushButton {{
                 background-color: {颜色.卡片背景};
                 color: {颜色.文字};
                 border: 1px solid {颜色.边框};
-                border-radius: 6px;
-                font-size: 12px;
+                border-radius: {布局常量.按钮圆角}px;
+                font-size: {布局常量.按钮文字字号}px;
             }}
             QPushButton:hover {{
                 background-color: {颜色.悬停背景};
             }}
         """)
         self._导出按钮.clicked.connect(self._导出档案)
-        卡片布局.addWidget(self._导出按钮)
+        档案布局.addWidget(self._导出按钮)
         
         # 删除按钮
         self._删除档案按钮 = QPushButton("🗑️")
-        self._删除档案按钮.setFixedSize(32, 32)
+        self._删除档案按钮.setFixedSize(32, 布局常量.按钮高度)
         self._删除档案按钮.setStyleSheet(f"""
             QPushButton {{
                 background-color: {颜色.卡片背景};
                 color: {颜色.错误};
                 border: 1px solid {颜色.边框};
-                border-radius: 6px;
+                border-radius: {布局常量.按钮圆角}px;
                 font-size: 14px;
             }}
             QPushButton:hover {{
@@ -214,14 +208,501 @@ class 配置页(QWidget):
             }}
         """)
         self._删除档案按钮.clicked.connect(self._删除档案)
-        卡片布局.addWidget(self._删除档案按钮)
+        档案布局.addWidget(self._删除档案按钮)
         
-        卡片布局.addStretch()
+        档案布局.addStretch()
+        
+        卡片.添加布局(档案布局)
         
         # 刷新档案列表
         self._刷新档案列表()
         
         return 卡片
+    
+    def _创建标签页内容(self, 表单布局: QFormLayout) -> QWidget:
+        """创建标签页内容容器，支持滚动 (Requirements 5.6)"""
+        # 滚动区域
+        滚动区域 = QScrollArea()
+        滚动区域.setWidgetResizable(True)
+        滚动区域.setFrameShape(QFrame.NoFrame)
+        滚动区域.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        
+        # 内容容器
+        内容容器 = QWidget()
+        内容布局 = QVBoxLayout(内容容器)
+        内容布局.setContentsMargins(布局常量.卡片内边距, 布局常量.卡片内边距,
+                                  布局常量.卡片内边距, 布局常量.卡片内边距)
+        内容布局.setSpacing(布局常量.表单行间距)
+        
+        内容布局.addLayout(表单布局)
+        内容布局.addStretch()
+        
+        滚动区域.setWidget(内容容器)
+        return 滚动区域
+    
+    def _创建游戏窗口标签页(self) -> QWidget:
+        """创建游戏窗口配置标签页 (Requirements 5.3)"""
+        表单布局 = QFormLayout()
+        表单布局.setSpacing(布局常量.表单行间距)
+        表单布局.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        # 窗口区域设置分组
+        分组标题1 = QLabel("📐 窗口区域")
+        分组标题1.setStyleSheet(f"""
+            font-size: {布局常量.卡片标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+            padding: 8px 0 4px 0;
+        """)
+        表单布局.addRow(分组标题1)
+        
+        # 游戏窗口区域 - 左
+        左边界 = QSpinBox()
+        左边界.setRange(0, 3840)
+        左边界.setSuffix(" px")
+        左边界.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        左边界.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["游戏窗口_左"] = 左边界
+        表单布局.addRow("窗口左边界:", self._创建带说明的控件(左边界, "游戏窗口左侧起始位置"))
+        
+        # 游戏窗口区域 - 上
+        上边界 = QSpinBox()
+        上边界.setRange(0, 2160)
+        上边界.setSuffix(" px")
+        上边界.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        上边界.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["游戏窗口_上"] = 上边界
+        表单布局.addRow("窗口上边界:", self._创建带说明的控件(上边界, "游戏窗口顶部起始位置"))
+        
+        # 游戏窗口区域 - 右
+        右边界 = QSpinBox()
+        右边界.setRange(0, 3840)
+        右边界.setSuffix(" px")
+        右边界.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        右边界.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["游戏窗口_右"] = 右边界
+        表单布局.addRow("窗口右边界:", self._创建带说明的控件(右边界, "游戏窗口右侧结束位置"))
+        
+        # 游戏窗口区域 - 下
+        下边界 = QSpinBox()
+        下边界.setRange(0, 2160)
+        下边界.setSuffix(" px")
+        下边界.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        下边界.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["游戏窗口_下"] = 下边界
+        表单布局.addRow("窗口下边界:", self._创建带说明的控件(下边界, "游戏窗口底部结束位置"))
+        
+        # 分辨率设置分组
+        分组标题2 = QLabel("🖼️ 分辨率设置")
+        分组标题2.setStyleSheet(f"""
+            font-size: {布局常量.卡片标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+            padding: 12px 0 4px 0;
+        """)
+        表单布局.addRow(分组标题2)
+        
+        # 游戏分辨率 - 宽度
+        游戏宽度 = QSpinBox()
+        游戏宽度.setRange(640, 3840)
+        游戏宽度.setSuffix(" px")
+        游戏宽度.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        游戏宽度.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["游戏宽度"] = 游戏宽度
+        表单布局.addRow("游戏宽度:", self._创建带说明的控件(游戏宽度, "游戏画面的水平分辨率"))
+        
+        # 游戏分辨率 - 高度
+        游戏高度 = QSpinBox()
+        游戏高度.setRange(480, 2160)
+        游戏高度.setSuffix(" px")
+        游戏高度.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        游戏高度.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["游戏高度"] = 游戏高度
+        表单布局.addRow("游戏高度:", self._创建带说明的控件(游戏高度, "游戏画面的垂直分辨率"))
+        
+        return self._创建标签页内容(表单布局)
+    
+    def _创建模型设置标签页(self) -> QWidget:
+        """创建模型设置配置标签页 (Requirements 5.3)"""
+        表单布局 = QFormLayout()
+        表单布局.setSpacing(布局常量.表单行间距)
+        表单布局.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        # 输入尺寸分组
+        分组标题1 = QLabel("📏 输入尺寸")
+        分组标题1.setStyleSheet(f"""
+            font-size: {布局常量.卡片标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+            padding: 8px 0 4px 0;
+        """)
+        表单布局.addRow(分组标题1)
+        
+        # 模型输入宽度
+        输入宽度 = QSpinBox()
+        输入宽度.setRange(120, 960)
+        输入宽度.setSingleStep(10)
+        输入宽度.setSuffix(" px")
+        输入宽度.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        输入宽度.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["模型输入宽度"] = 输入宽度
+        表单布局.addRow("输入宽度:", self._创建带说明的控件(输入宽度, "模型输入图像的宽度，影响处理速度"))
+        
+        # 模型输入高度
+        输入高度 = QSpinBox()
+        输入高度.setRange(68, 540)
+        输入高度.setSingleStep(10)
+        输入高度.setSuffix(" px")
+        输入高度.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        输入高度.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["模型输入高度"] = 输入高度
+        表单布局.addRow("输入高度:", self._创建带说明的控件(输入高度, "模型输入图像的高度，影响处理速度"))
+        
+        # 路径设置分组
+        分组标题2 = QLabel("📂 路径设置")
+        分组标题2.setStyleSheet(f"""
+            font-size: {布局常量.卡片标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+            padding: 12px 0 4px 0;
+        """)
+        表单布局.addRow(分组标题2)
+        
+        # 模型保存路径
+        模型路径 = QLineEdit()
+        模型路径.setPlaceholderText("模型/游戏AI")
+        模型路径.setFixedWidth(布局常量.表单控件最大宽度)
+        模型路径.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["模型保存路径"] = 模型路径
+        表单布局.addRow("模型路径:", self._创建带说明的控件(模型路径, "训练后模型的保存位置"))
+        
+        # 预训练模型路径
+        预训练路径 = QLineEdit()
+        预训练路径.setPlaceholderText("模型/预训练模型/test")
+        预训练路径.setFixedWidth(布局常量.表单控件最大宽度)
+        预训练路径.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["预训练模型路径"] = 预训练路径
+        表单布局.addRow("预训练模型:", self._创建带说明的控件(预训练路径, "预训练模型的加载路径"))
+        
+        return self._创建标签页内容(表单布局)
+    
+    def _创建训练参数标签页(self) -> QWidget:
+        """创建训练参数配置标签页 (Requirements 5.3)"""
+        表单布局 = QFormLayout()
+        表单布局.setSpacing(布局常量.表单行间距)
+        表单布局.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        # 训练设置分组
+        分组标题1 = QLabel("⚙️ 训练设置")
+        分组标题1.setStyleSheet(f"""
+            font-size: {布局常量.卡片标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+            padding: 8px 0 4px 0;
+        """)
+        表单布局.addRow(分组标题1)
+        
+        # 学习率 - 使用滑块和输入框组合
+        学习率容器 = QWidget()
+        学习率布局 = QHBoxLayout(学习率容器)
+        学习率布局.setContentsMargins(0, 0, 0, 0)
+        学习率布局.setSpacing(8)
+        
+        学习率滑块 = QSlider(Qt.Horizontal)
+        学习率滑块.setRange(1, 100)  # 0.0001 到 0.01
+        学习率滑块.setValue(10)  # 默认 0.001
+        学习率滑块.setFixedWidth(100)
+        
+        学习率输入 = QDoubleSpinBox()
+        学习率输入.setRange(0.0001, 0.01)
+        学习率输入.setDecimals(4)
+        学习率输入.setSingleStep(0.0001)
+        学习率输入.setFixedWidth(80)
+        学习率输入.setFixedHeight(布局常量.表单控件高度)
+        
+        # 滑块和输入框联动
+        def 滑块更新输入(值):
+            学习率输入.setValue(值 / 10000)
+        
+        def 输入更新滑块(值):
+            学习率滑块.setValue(int(值 * 10000))
+        
+        学习率滑块.valueChanged.connect(滑块更新输入)
+        学习率输入.valueChanged.connect(输入更新滑块)
+        
+        学习率布局.addWidget(学习率滑块)
+        学习率布局.addWidget(学习率输入)
+        
+        self._配置控件["学习率"] = 学习率输入
+        self._配置控件["学习率_滑块"] = 学习率滑块
+        表单布局.addRow("学习率:", self._创建带说明的控件(学习率容器, "模型训练的学习率，建议范围 0.0001-0.01"))
+        
+        # 训练轮数
+        训练轮数 = QSpinBox()
+        训练轮数.setRange(1, 100)
+        训练轮数.setSuffix(" 轮")
+        训练轮数.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        训练轮数.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["训练轮数"] = 训练轮数
+        表单布局.addRow("训练轮数:", self._创建带说明的控件(训练轮数, "模型训练的总轮数"))
+        
+        # 数据设置分组
+        分组标题2 = QLabel("📊 数据设置")
+        分组标题2.setStyleSheet(f"""
+            font-size: {布局常量.卡片标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+            padding: 12px 0 4px 0;
+        """)
+        表单布局.addRow(分组标题2)
+        
+        # 每文件样本数
+        样本数 = QSpinBox()
+        样本数.setRange(100, 5000)
+        样本数.setSingleStep(100)
+        样本数.setSuffix(" 个")
+        样本数.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        样本数.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["每文件样本数"] = 样本数
+        表单布局.addRow("每文件样本数:", self._创建带说明的控件(样本数, "每个数据文件保存的样本数量"))
+        
+        # 数据保存路径
+        数据路径 = QLineEdit()
+        数据路径.setPlaceholderText("数据/")
+        数据路径.setFixedWidth(布局常量.表单控件最大宽度)
+        数据路径.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["数据保存路径"] = 数据路径
+        表单布局.addRow("数据路径:", self._创建带说明的控件(数据路径, "训练数据的保存目录"))
+        
+        # 运动检测阈值
+        运动阈值 = QSpinBox()
+        运动阈值.setRange(100, 5000)
+        运动阈值.setSingleStep(100)
+        运动阈值.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        运动阈值.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["运动检测阈值"] = 运动阈值
+        表单布局.addRow("运动检测阈值:", self._创建带说明的控件(运动阈值, "低于此值认为角色卡住"))
+        
+        return self._创建标签页内容(表单布局)
+
+    def _创建增强模块标签页(self) -> QWidget:
+        """创建增强模块配置标签页 (Requirements 5.3)"""
+        表单布局 = QFormLayout()
+        表单布局.setSpacing(布局常量.表单行间距)
+        表单布局.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        
+        # YOLO检测器分组
+        分组标题1 = QLabel("🎯 YOLO检测器")
+        分组标题1.setStyleSheet(f"""
+            font-size: {布局常量.卡片标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+            padding: 8px 0 4px 0;
+        """)
+        表单布局.addRow(分组标题1)
+        
+        # YOLO检测器开关
+        yolo启用 = QCheckBox("启用YOLO目标检测")
+        yolo启用.setStyleSheet("QCheckBox { spacing: 8px; }")
+        self._配置控件["YOLO启用"] = yolo启用
+        表单布局.addRow("", self._创建带说明的控件(yolo启用, "启用后可检测游戏中的怪物、NPC等实体"))
+        
+        # YOLO置信度阈值
+        yolo置信度容器 = QWidget()
+        yolo置信度布局 = QHBoxLayout(yolo置信度容器)
+        yolo置信度布局.setContentsMargins(0, 0, 0, 0)
+        yolo置信度布局.setSpacing(8)
+        
+        yolo置信度滑块 = QSlider(Qt.Horizontal)
+        yolo置信度滑块.setRange(10, 90)
+        yolo置信度滑块.setValue(50)
+        yolo置信度滑块.setFixedWidth(100)
+        
+        yolo置信度标签 = QLabel("0.50")
+        yolo置信度标签.setFixedWidth(40)
+        
+        def 更新置信度标签(值):
+            yolo置信度标签.setText(f"{值/100:.2f}")
+        
+        yolo置信度滑块.valueChanged.connect(更新置信度标签)
+        
+        yolo置信度布局.addWidget(yolo置信度滑块)
+        yolo置信度布局.addWidget(yolo置信度标签)
+        
+        self._配置控件["YOLO置信度"] = yolo置信度滑块
+        表单布局.addRow("YOLO置信度:", self._创建带说明的控件(yolo置信度容器, "检测置信度阈值，越高越严格"))
+        
+        # YOLO检测间隔
+        yolo间隔 = QSpinBox()
+        yolo间隔.setRange(1, 10)
+        yolo间隔.setSuffix(" 帧")
+        yolo间隔.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        yolo间隔.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["YOLO检测间隔"] = yolo间隔
+        表单布局.addRow("检测间隔:", self._创建带说明的控件(yolo间隔, "每N帧执行一次检测，值越大性能越好"))
+        
+        # 状态识别器分组
+        分组标题2 = QLabel("🔍 状态识别器")
+        分组标题2.setStyleSheet(f"""
+            font-size: {布局常量.卡片标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+            padding: 12px 0 4px 0;
+        """)
+        表单布局.addRow(分组标题2)
+        
+        # 状态识别器开关
+        状态识别启用 = QCheckBox("启用状态识别")
+        状态识别启用.setStyleSheet("QCheckBox { spacing: 8px; }")
+        self._配置控件["状态识别启用"] = 状态识别启用
+        表单布局.addRow("", self._创建带说明的控件(状态识别启用, "启用后可识别当前游戏状态（战斗/对话等）"))
+        
+        # 决策引擎分组
+        分组标题3 = QLabel("🧠 决策引擎")
+        分组标题3.setStyleSheet(f"""
+            font-size: {布局常量.卡片标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+            padding: 12px 0 4px 0;
+        """)
+        表单布局.addRow(分组标题3)
+        
+        # 决策引擎开关
+        决策引擎启用 = QCheckBox("启用决策引擎")
+        决策引擎启用.setStyleSheet("QCheckBox { spacing: 8px; }")
+        self._配置控件["决策引擎启用"] = 决策引擎启用
+        表单布局.addRow("", self._创建带说明的控件(决策引擎启用, "启用后使用规则+模型混合决策"))
+        
+        # 决策策略选择
+        决策策略 = QComboBox()
+        决策策略.addItems(["规则优先", "模型优先", "混合加权"])
+        决策策略.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        决策策略.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["决策策略"] = 决策策略
+        表单布局.addRow("决策策略:", self._创建带说明的控件(决策策略, "选择决策引擎的工作模式"))
+        
+        # 规则权重
+        规则权重容器 = QWidget()
+        规则权重布局 = QHBoxLayout(规则权重容器)
+        规则权重布局.setContentsMargins(0, 0, 0, 0)
+        规则权重布局.setSpacing(8)
+        
+        规则权重滑块 = QSlider(Qt.Horizontal)
+        规则权重滑块.setRange(0, 100)
+        规则权重滑块.setValue(60)
+        规则权重滑块.setFixedWidth(100)
+        
+        规则权重标签 = QLabel("0.60")
+        规则权重标签.setFixedWidth(40)
+        
+        def 更新规则权重标签(值):
+            规则权重标签.setText(f"{值/100:.2f}")
+        
+        规则权重滑块.valueChanged.connect(更新规则权重标签)
+        
+        规则权重布局.addWidget(规则权重滑块)
+        规则权重布局.addWidget(规则权重标签)
+        
+        self._配置控件["规则权重"] = 规则权重滑块
+        表单布局.addRow("规则权重:", self._创建带说明的控件(规则权重容器, "混合模式下规则的权重（模型权重=1-规则权重）"))
+        
+        # 性能配置分组
+        分组标题4 = QLabel("⚡ 性能配置")
+        分组标题4.setStyleSheet(f"""
+            font-size: {布局常量.卡片标题字号}px;
+            font-weight: bold;
+            color: {颜色.标题};
+            padding: 12px 0 4px 0;
+        """)
+        表单布局.addRow(分组标题4)
+        
+        # 性能配置 - 自动降级
+        自动降级 = QCheckBox("启用自动性能降级")
+        自动降级.setStyleSheet("QCheckBox { spacing: 8px; }")
+        self._配置控件["自动降级"] = 自动降级
+        表单布局.addRow("", self._创建带说明的控件(自动降级, "帧率过低时自动降低检测频率"))
+        
+        # 帧率阈值
+        帧率阈值 = QSpinBox()
+        帧率阈值.setRange(5, 60)
+        帧率阈值.setSuffix(" FPS")
+        帧率阈值.setFixedWidth(布局常量.表单控件最小宽度 + 40)
+        帧率阈值.setFixedHeight(布局常量.表单控件高度)
+        self._配置控件["帧率阈值"] = 帧率阈值
+        表单布局.addRow("帧率阈值:", self._创建带说明的控件(帧率阈值, "低于此帧率进入低性能模式"))
+        
+        return self._创建标签页内容(表单布局)
+    
+    def _创建底部按钮区域(self) -> QWidget:
+        """创建底部固定的保存和重置按钮区域 (Requirements 5.5)"""
+        按钮容器 = QWidget()
+        按钮布局 = QHBoxLayout(按钮容器)
+        按钮布局.setContentsMargins(0, 布局常量.卡片间距, 0, 0)
+        按钮布局.setSpacing(布局常量.按钮间距)
+        
+        按钮布局.addStretch()
+        
+        # 重置按钮
+        self._重置按钮 = QPushButton("🔄 重置默认")
+        self._重置按钮.setFixedSize(100, 布局常量.按钮高度)
+        self._重置按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.卡片背景};
+                color: {颜色.文字};
+                border: 1px solid {颜色.边框};
+                border-radius: {布局常量.按钮圆角}px;
+                font-size: {布局常量.按钮文字字号}px;
+                padding: 0 {布局常量.按钮水平内边距}px;
+            }}
+            QPushButton:hover {{
+                background-color: {颜色.悬停背景};
+            }}
+        """)
+        self._重置按钮.clicked.connect(self._重置配置)
+        按钮布局.addWidget(self._重置按钮)
+        
+        # 保存按钮
+        self._保存按钮 = QPushButton("💾 保存配置")
+        self._保存按钮.setFixedSize(100, 布局常量.按钮高度)
+        self._保存按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.主色};
+                color: white;
+                border: none;
+                border-radius: {布局常量.按钮圆角}px;
+                font-size: {布局常量.按钮文字字号}px;
+                font-weight: bold;
+                padding: 0 {布局常量.按钮水平内边距}px;
+            }}
+            QPushButton:hover {{
+                background-color: #2563EB;
+            }}
+        """)
+        self._保存按钮.clicked.connect(self._保存配置)
+        按钮布局.addWidget(self._保存按钮)
+        
+        return 按钮容器
+    
+    def _创建带说明的控件(self, 控件: QWidget, 说明: str) -> QWidget:
+        """创建带说明文字的控件容器"""
+        容器 = QWidget()
+        布局 = QVBoxLayout(容器)
+        布局.setContentsMargins(0, 0, 0, 0)
+        布局.setSpacing(2)
+        
+        布局.addWidget(控件)
+        
+        说明标签 = QLabel(说明)
+        说明标签.setStyleSheet(f"""
+            color: {颜色.次要文字};
+            font-size: {布局常量.次要文字字号}px;
+        """)
+        说明标签.setWordWrap(True)
+        布局.addWidget(说明标签)
+        
+        return 容器
+    
+    # ==================== 档案管理方法 ====================
     
     def _刷新档案列表(self):
         """刷新档案列表"""
@@ -261,9 +742,6 @@ class 配置页(QWidget):
         try:
             self._配置管理器.switch_profile(档案名称)
             self.档案已切换.emit(档案名称)
-            
-            # 显示切换成功提示
-            # 可以在状态栏显示，这里简单处理
         except FileNotFoundError:
             QMessageBox.warning(self, "切换失败", f"档案 '{档案名称}' 不存在")
         except Exception as e:
@@ -415,320 +893,9 @@ class 配置页(QWidget):
             QMessageBox.warning(self, "删除失败", f"档案 '{当前档案名}' 不存在")
         except Exception as e:
             QMessageBox.warning(self, "删除失败", f"删除档案时发生错误:\n{str(e)}")
-    
-    def _创建配置卡片(self, 标题文字: str) -> tuple:
-        """创建配置分组卡片，返回(卡片, 内容布局)"""
-        卡片 = QFrame()
-        卡片.setProperty("class", "card")
-        卡片.setStyleSheet("""
-            QFrame[class="card"] {
-                background-color: #FFFFFF;
-                border-radius: 12px;
-                border: 1px solid #E2E8F0;
-                padding: 16px;
-            }
-        """)
-        
-        卡片布局 = QVBoxLayout(卡片)
-        卡片布局.setContentsMargins(16, 16, 16, 16)
-        卡片布局.setSpacing(12)
-        
-        # 分组标题
-        标题 = QLabel(标题文字)
-        标题.setStyleSheet("font-size: 15px; font-weight: bold; color: #1E293B; margin-bottom: 8px;")
-        卡片布局.addWidget(标题)
-        
-        # 内容布局
-        内容布局 = QFormLayout()
-        内容布局.setSpacing(12)
-        内容布局.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        卡片布局.addLayout(内容布局)
-        
-        return 卡片, 内容布局
 
-    def _创建带说明的控件(self, 控件: QWidget, 说明: str) -> QWidget:
-        """创建带说明文字的控件容器"""
-        容器 = QWidget()
-        布局 = QVBoxLayout(容器)
-        布局.setContentsMargins(0, 0, 0, 0)
-        布局.setSpacing(4)
-        
-        布局.addWidget(控件)
-        
-        说明标签 = QLabel(说明)
-        说明标签.setStyleSheet("color: #64748B; font-size: 11px;")
-        说明标签.setWordWrap(True)
-        布局.addWidget(说明标签)
-        
-        return 容器
+    # ==================== 配置加载和保存方法 ====================
     
-    def _创建游戏窗口配置组(self) -> QFrame:
-        """创建游戏窗口配置分组"""
-        卡片, 布局 = self._创建配置卡片("🎮 游戏窗口设置")
-        
-        # 游戏窗口区域 - 左
-        左边界 = QSpinBox()
-        左边界.setRange(0, 3840)
-        左边界.setSuffix(" px")
-        左边界.setFixedWidth(120)
-        self._配置控件["游戏窗口_左"] = 左边界
-        布局.addRow("窗口左边界:", self._创建带说明的控件(左边界, "游戏窗口左侧起始位置"))
-        
-        # 游戏窗口区域 - 上
-        上边界 = QSpinBox()
-        上边界.setRange(0, 2160)
-        上边界.setSuffix(" px")
-        上边界.setFixedWidth(120)
-        self._配置控件["游戏窗口_上"] = 上边界
-        布局.addRow("窗口上边界:", self._创建带说明的控件(上边界, "游戏窗口顶部起始位置"))
-        
-        # 游戏窗口区域 - 右
-        右边界 = QSpinBox()
-        右边界.setRange(0, 3840)
-        右边界.setSuffix(" px")
-        右边界.setFixedWidth(120)
-        self._配置控件["游戏窗口_右"] = 右边界
-        布局.addRow("窗口右边界:", self._创建带说明的控件(右边界, "游戏窗口右侧结束位置"))
-        
-        # 游戏窗口区域 - 下
-        下边界 = QSpinBox()
-        下边界.setRange(0, 2160)
-        下边界.setSuffix(" px")
-        下边界.setFixedWidth(120)
-        self._配置控件["游戏窗口_下"] = 下边界
-        布局.addRow("窗口下边界:", self._创建带说明的控件(下边界, "游戏窗口底部结束位置"))
-        
-        # 游戏分辨率 - 宽度
-        游戏宽度 = QSpinBox()
-        游戏宽度.setRange(640, 3840)
-        游戏宽度.setSuffix(" px")
-        游戏宽度.setFixedWidth(120)
-        self._配置控件["游戏宽度"] = 游戏宽度
-        布局.addRow("游戏宽度:", self._创建带说明的控件(游戏宽度, "游戏画面的水平分辨率"))
-        
-        # 游戏分辨率 - 高度
-        游戏高度 = QSpinBox()
-        游戏高度.setRange(480, 2160)
-        游戏高度.setSuffix(" px")
-        游戏高度.setFixedWidth(120)
-        self._配置控件["游戏高度"] = 游戏高度
-        布局.addRow("游戏高度:", self._创建带说明的控件(游戏高度, "游戏画面的垂直分辨率"))
-        
-        return 卡片
-    
-    def _创建模型配置组(self) -> QFrame:
-        """创建模型配置分组"""
-        卡片, 布局 = self._创建配置卡片("🧠 模型设置")
-        
-        # 模型输入宽度
-        输入宽度 = QSpinBox()
-        输入宽度.setRange(120, 960)
-        输入宽度.setSingleStep(10)
-        输入宽度.setSuffix(" px")
-        输入宽度.setFixedWidth(120)
-        self._配置控件["模型输入宽度"] = 输入宽度
-        布局.addRow("输入宽度:", self._创建带说明的控件(输入宽度, "模型输入图像的宽度，影响处理速度"))
-        
-        # 模型输入高度
-        输入高度 = QSpinBox()
-        输入高度.setRange(68, 540)
-        输入高度.setSingleStep(10)
-        输入高度.setSuffix(" px")
-        输入高度.setFixedWidth(120)
-        self._配置控件["模型输入高度"] = 输入高度
-        布局.addRow("输入高度:", self._创建带说明的控件(输入高度, "模型输入图像的高度，影响处理速度"))
-        
-        # 模型保存路径
-        模型路径 = QLineEdit()
-        模型路径.setPlaceholderText("模型/游戏AI")
-        模型路径.setFixedWidth(200)
-        self._配置控件["模型保存路径"] = 模型路径
-        布局.addRow("模型路径:", self._创建带说明的控件(模型路径, "训练后模型的保存位置"))
-        
-        # 预训练模型路径
-        预训练路径 = QLineEdit()
-        预训练路径.setPlaceholderText("模型/预训练模型/test")
-        预训练路径.setFixedWidth(200)
-        self._配置控件["预训练模型路径"] = 预训练路径
-        布局.addRow("预训练模型:", self._创建带说明的控件(预训练路径, "预训练模型的加载路径"))
-        
-        return 卡片
-
-    def _创建训练配置组(self) -> QFrame:
-        """创建训练配置分组"""
-        卡片, 布局 = self._创建配置卡片("📚 训练设置")
-        
-        # 学习率 - 使用滑块和输入框组合
-        学习率容器 = QWidget()
-        学习率布局 = QHBoxLayout(学习率容器)
-        学习率布局.setContentsMargins(0, 0, 0, 0)
-        学习率布局.setSpacing(8)
-        
-        学习率滑块 = QSlider(Qt.Horizontal)
-        学习率滑块.setRange(1, 100)  # 0.0001 到 0.01
-        学习率滑块.setValue(10)  # 默认 0.001
-        学习率滑块.setFixedWidth(120)
-        
-        学习率输入 = QDoubleSpinBox()
-        学习率输入.setRange(0.0001, 0.01)
-        学习率输入.setDecimals(4)
-        学习率输入.setSingleStep(0.0001)
-        学习率输入.setFixedWidth(90)
-        
-        # 滑块和输入框联动
-        def 滑块更新输入(值):
-            学习率输入.setValue(值 / 10000)
-        
-        def 输入更新滑块(值):
-            学习率滑块.setValue(int(值 * 10000))
-        
-        学习率滑块.valueChanged.connect(滑块更新输入)
-        学习率输入.valueChanged.connect(输入更新滑块)
-        
-        学习率布局.addWidget(学习率滑块)
-        学习率布局.addWidget(学习率输入)
-        
-        self._配置控件["学习率"] = 学习率输入
-        self._配置控件["学习率_滑块"] = 学习率滑块
-        布局.addRow("学习率:", self._创建带说明的控件(学习率容器, "模型训练的学习率，建议范围 0.0001-0.01"))
-        
-        # 训练轮数
-        训练轮数 = QSpinBox()
-        训练轮数.setRange(1, 100)
-        训练轮数.setSuffix(" 轮")
-        训练轮数.setFixedWidth(120)
-        self._配置控件["训练轮数"] = 训练轮数
-        布局.addRow("训练轮数:", self._创建带说明的控件(训练轮数, "模型训练的总轮数"))
-        
-        # 每文件样本数
-        样本数 = QSpinBox()
-        样本数.setRange(100, 5000)
-        样本数.setSingleStep(100)
-        样本数.setSuffix(" 个")
-        样本数.setFixedWidth(120)
-        self._配置控件["每文件样本数"] = 样本数
-        布局.addRow("每文件样本数:", self._创建带说明的控件(样本数, "每个数据文件保存的样本数量"))
-        
-        # 数据保存路径
-        数据路径 = QLineEdit()
-        数据路径.setPlaceholderText("数据/")
-        数据路径.setFixedWidth(200)
-        self._配置控件["数据保存路径"] = 数据路径
-        布局.addRow("数据路径:", self._创建带说明的控件(数据路径, "训练数据的保存目录"))
-        
-        # 运动检测阈值
-        运动阈值 = QSpinBox()
-        运动阈值.setRange(100, 5000)
-        运动阈值.setSingleStep(100)
-        运动阈值.setFixedWidth(120)
-        self._配置控件["运动检测阈值"] = 运动阈值
-        布局.addRow("运动检测阈值:", self._创建带说明的控件(运动阈值, "低于此值认为角色卡住"))
-        
-        return 卡片
-    
-    def _创建增强模块配置组(self) -> QFrame:
-        """创建增强模块配置分组"""
-        卡片, 布局 = self._创建配置卡片("🚀 增强模块设置")
-        
-        # YOLO检测器开关
-        yolo启用 = QCheckBox("启用YOLO目标检测")
-        yolo启用.setStyleSheet("QCheckBox { spacing: 8px; }")
-        self._配置控件["YOLO启用"] = yolo启用
-        布局.addRow("", self._创建带说明的控件(yolo启用, "启用后可检测游戏中的怪物、NPC等实体"))
-        
-        # YOLO置信度阈值
-        yolo置信度容器 = QWidget()
-        yolo置信度布局 = QHBoxLayout(yolo置信度容器)
-        yolo置信度布局.setContentsMargins(0, 0, 0, 0)
-        yolo置信度布局.setSpacing(8)
-        
-        yolo置信度滑块 = QSlider(Qt.Horizontal)
-        yolo置信度滑块.setRange(10, 90)
-        yolo置信度滑块.setValue(50)
-        yolo置信度滑块.setFixedWidth(120)
-        
-        yolo置信度标签 = QLabel("0.50")
-        yolo置信度标签.setFixedWidth(40)
-        
-        def 更新置信度标签(值):
-            yolo置信度标签.setText(f"{值/100:.2f}")
-        
-        yolo置信度滑块.valueChanged.connect(更新置信度标签)
-        
-        yolo置信度布局.addWidget(yolo置信度滑块)
-        yolo置信度布局.addWidget(yolo置信度标签)
-        
-        self._配置控件["YOLO置信度"] = yolo置信度滑块
-        布局.addRow("YOLO置信度:", self._创建带说明的控件(yolo置信度容器, "检测置信度阈值，越高越严格"))
-        
-        # YOLO检测间隔
-        yolo间隔 = QSpinBox()
-        yolo间隔.setRange(1, 10)
-        yolo间隔.setSuffix(" 帧")
-        yolo间隔.setFixedWidth(120)
-        self._配置控件["YOLO检测间隔"] = yolo间隔
-        布局.addRow("检测间隔:", self._创建带说明的控件(yolo间隔, "每N帧执行一次检测，值越大性能越好"))
-        
-        # 状态识别器开关
-        状态识别启用 = QCheckBox("启用状态识别")
-        状态识别启用.setStyleSheet("QCheckBox { spacing: 8px; }")
-        self._配置控件["状态识别启用"] = 状态识别启用
-        布局.addRow("", self._创建带说明的控件(状态识别启用, "启用后可识别当前游戏状态（战斗/对话等）"))
-        
-        # 决策引擎开关
-        决策引擎启用 = QCheckBox("启用决策引擎")
-        决策引擎启用.setStyleSheet("QCheckBox { spacing: 8px; }")
-        self._配置控件["决策引擎启用"] = 决策引擎启用
-        布局.addRow("", self._创建带说明的控件(决策引擎启用, "启用后使用规则+模型混合决策"))
-        
-        # 决策策略选择
-        决策策略 = QComboBox()
-        决策策略.addItems(["规则优先", "模型优先", "混合加权"])
-        决策策略.setFixedWidth(120)
-        self._配置控件["决策策略"] = 决策策略
-        布局.addRow("决策策略:", self._创建带说明的控件(决策策略, "选择决策引擎的工作模式"))
-        
-        # 规则权重
-        规则权重容器 = QWidget()
-        规则权重布局 = QHBoxLayout(规则权重容器)
-        规则权重布局.setContentsMargins(0, 0, 0, 0)
-        规则权重布局.setSpacing(8)
-        
-        规则权重滑块 = QSlider(Qt.Horizontal)
-        规则权重滑块.setRange(0, 100)
-        规则权重滑块.setValue(60)
-        规则权重滑块.setFixedWidth(120)
-        
-        规则权重标签 = QLabel("0.60")
-        规则权重标签.setFixedWidth(40)
-        
-        def 更新规则权重标签(值):
-            规则权重标签.setText(f"{值/100:.2f}")
-        
-        规则权重滑块.valueChanged.connect(更新规则权重标签)
-        
-        规则权重布局.addWidget(规则权重滑块)
-        规则权重布局.addWidget(规则权重标签)
-        
-        self._配置控件["规则权重"] = 规则权重滑块
-        布局.addRow("规则权重:", self._创建带说明的控件(规则权重容器, "混合模式下规则的权重（模型权重=1-规则权重）"))
-        
-        # 性能配置 - 自动降级
-        自动降级 = QCheckBox("启用自动性能降级")
-        自动降级.setStyleSheet("QCheckBox { spacing: 8px; }")
-        self._配置控件["自动降级"] = 自动降级
-        布局.addRow("", self._创建带说明的控件(自动降级, "帧率过低时自动降低检测频率"))
-        
-        # 帧率阈值
-        帧率阈值 = QSpinBox()
-        帧率阈值.setRange(5, 60)
-        帧率阈值.setSuffix(" FPS")
-        帧率阈值.setFixedWidth(120)
-        self._配置控件["帧率阈值"] = 帧率阈值
-        布局.addRow("帧率阈值:", self._创建带说明的控件(帧率阈值, "低于此帧率进入低性能模式"))
-        
-        return 卡片
-
     def _加载配置(self):
         """从配置文件加载配置值到控件"""
         try:
@@ -1030,6 +1197,8 @@ class 配置页(QWidget):
         self._配置控件["自动降级"].setChecked(配置.get("自动降级", True))
         self._配置控件["帧率阈值"].setValue(配置.get("帧率阈值", 15))
 
+    # ==================== 配置文件生成方法 ====================
+    
     def _生成设置文件内容(self, 配置: dict) -> str:
         """生成设置.py文件内容"""
         # 读取原始文件获取动作定义等不变的部分
