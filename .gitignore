@@ -40,7 +40,9 @@ htmlcov/
 .tox/
 .nox/
 .hypothesis/
-.kiro/
+
+# Kiro（保留 specs 和 hooks）
+.kiro/settings/
 
 # 日志
 *.log
