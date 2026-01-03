@@ -248,21 +248,15 @@ class 检查点管理器:
             日志.warning(f"更新最新链接失败: {e}")
     
     def _获取最新检查点路径(self) -> Optional[str]:
-        """获取最新检查点的路径"""
-        链接路径 = os.path.join(self.保存目录, self.最新检查点链接名)
+        """
+        获取训练进度最新的检查点路径
         
-        if os.path.exists(链接路径):
-            try:
-                with open(链接路径, 'r', encoding='utf-8') as f:
-                    路径 = f.read().strip()
-                if os.path.exists(路径):
-                    return 路径
-            except Exception:
-                pass
-        
-        # 如果链接文件不存在或无效，从元数据获取最新的
+        "最新"定义为 epoch 和 batch 最大的检查点，而不是最后保存的检查点。
+        这确保了即使乱序保存检查点，也能正确返回训练进度最新的检查点。
+        """
+        # 始终从元数据获取训练进度最新的检查点（按 epoch, batch 排序）
         if self._元数据缓存:
-            # 按epoch和batch排序，获取最新的
+            # 按 epoch 和 batch 排序，获取训练进度最新的
             排序后 = sorted(
                 self._元数据缓存,
                 key=lambda x: (x.epoch, x.batch),
@@ -272,23 +266,49 @@ class 检查点管理器:
                 if os.path.exists(元数据.文件路径):
                     return 元数据.文件路径
         
+        # 如果元数据缓存为空，尝试从链接文件获取（兼容旧版本）
+        链接路径 = os.path.join(self.保存目录, self.最新检查点链接名)
+        if os.path.exists(链接路径):
+            try:
+                with open(链接路径, 'r', encoding='utf-8') as f:
+                    路径 = f.read().strip()
+                if os.path.exists(路径):
+                    return 路径
+            except Exception:
+                pass
+        
         return None
 
-    def 加载检查点(self, 检查点路径: str = None) -> Optional[dict]:
+    def 加载检查点(self, 检查点路径: str = None, 
+                   epoch: int = None, 
+                   时间戳: str = None) -> Optional[dict]:
         """
         加载检查点
         
         参数:
-            检查点路径: 指定检查点路径，None 则加载最新
+            检查点路径: 指定检查点路径，None 则根据其他参数或加载最新
+            epoch: 指定要加载的 epoch 编号
+            时间戳: 指定要加载的时间戳（ISO格式字符串）
             
         返回:
             检查点数据字典，加载失败返回 None
+            
+        说明:
+            - 如果指定了检查点路径，直接加载该路径
+            - 如果指定了 epoch，加载该 epoch 的最新检查点
+            - 如果指定了时间戳，加载最接近该时间戳的检查点
+            - 如果都未指定，加载最新的检查点
         """
         import pickle
         
         # 确定要加载的检查点路径
         if 检查点路径 is None:
-            检查点路径 = self._获取最新检查点路径()
+            if epoch is not None:
+                检查点路径 = self._按epoch查找检查点(epoch)
+            elif 时间戳 is not None:
+                检查点路径 = self._按时间戳查找检查点(时间戳)
+            else:
+                检查点路径 = self._获取最新检查点路径()
         
         if 检查点路径 is None or not os.path.exists(检查点路径):
             日志.warning("未找到可用的检查点")
@@ -311,6 +331,71 @@ class 检查点管理器:
         except Exception as e:
             日志.error(f"加载检查点失败: {e}")
             return self._尝试加载备用检查点(检查点路径)
+    
+    def _按epoch查找检查点(self, 目标epoch: int) -> Optional[str]:
+        """
+        按 epoch 编号查找检查点
+        
+        参数:
+            目标epoch: 要查找的 epoch 编号
+            
+        返回:
+            检查点文件路径，未找到返回 None
+        """
+        # 筛选指定 epoch 的检查点
+        匹配的检查点 = [
+            元数据 for 元数据 in self._元数据缓存
+            if 元数据.epoch == 目标epoch and os.path.exists(元数据.文件路径)
+        ]
+        
+        if not 匹配的检查点:
+            日志.warning(f"未找到 epoch {目标epoch} 的检查点")
+            return None
+        
+        # 如果同一 epoch 有多个检查点，返回 batch 最大的（最新的）
+        匹配的检查点.sort(key=lambda x: x.batch, reverse=True)
+        return 匹配的检查点[0].文件路径
+    
+    def _按时间戳查找检查点(self, 目标时间戳: str) -> Optional[str]:
+        """
+        按时间戳查找最接近的检查点
+        
+        参数:
+            目标时间戳: ISO格式的时间戳字符串
+            
+        返回:
+            检查点文件路径，未找到返回 None
+        """
+        from datetime import datetime
+        
+        try:
+            # 解析目标时间戳
+            目标时间 = datetime.fromisoformat(目标时间戳)
+        except ValueError as e:
+            日志.error(f"无效的时间戳格式: {目标时间戳}, 错误: {e}")
+            return None
+        
+        # 筛选有效的检查点
+        有效检查点 = [
+            元数据 for 元数据 in self._元数据缓存
+            if os.path.exists(元数据.文件路径)
+        ]
+        
+        if not 有效检查点:
+            日志.warning("没有可用的检查点")
+            return None
+        
+        # 计算每个检查点与目标时间的差距
+        def 计算时间差(元数据):
+            try:
+                检查点时间 = datetime.fromisoformat(元数据.创建时间)
+                return abs((检查点时间 - 目标时间).total_seconds())
+            except ValueError:
+                return float('inf')
+        
+        # 找到最接近的检查点
+        最接近的 = min(有效检查点, key=计算时间差)
+        return 最接近的.文件路径
     
     def _查找元数据(self, 文件路径: str) -> Optional[检查点元数据]:
         """根据文件路径查找元数据"""
@@ -443,17 +528,251 @@ class 检查点管理器:
             os.remove(链接路径)
         
         日志.info("已清空所有检查点")
+    
+    def 验证检查点(self, 检查点路径: str) -> '检查点验证结果':
+        """
+        验证检查点文件完整性
+        
+        参数:
+            检查点路径: 检查点文件路径
+            
+        返回:
+            检查点验证结果对象
+        """
+        # 检查文件是否存在
+        if not os.path.exists(检查点路径):
+            return 检查点验证结果(
+                有效=False,
+                错误类型="文件不存在",
+                错误消息=f"检查点文件不存在: {检查点路径}"
+            )
+        
+        # 检查文件大小
+        try:
+            文件大小 = os.path.getsize(检查点路径)
+            if 文件大小 == 0:
+                return 检查点验证结果(
+                    有效=False,
+                    错误类型="文件为空",
+                    错误消息=f"检查点文件为空: {检查点路径}"
+                )
+        except OSError as e:
+            return 检查点验证结果(
+                有效=False,
+                错误类型="文件访问错误",
+                错误消息=f"无法访问检查点文件: {e}"
+            )
+        
+        # 验证校验和
+        元数据 = self._查找元数据(检查点路径)
+        if 元数据 and 元数据.校验和:
+            if not self._验证校验和(检查点路径, 元数据.校验和):
+                return 检查点验证结果(
+                    有效=False,
+                    错误类型="校验和不匹配",
+                    错误消息=f"检查点文件校验和不匹配，文件可能已损坏: {检查点路径}"
+                )
+        
+        # 尝试加载检查点数据验证格式
+        try:
+            import pickle
+            with open(检查点路径, 'rb') as f:
+                检查点数据 = pickle.load(f)
+            
+            # 验证必需字段
+            必需字段 = ['版本', '模型权重', '优化器状态', '训练进度', '指标', '元数据']
+            缺失字段 = [字段 for 字段 in 必需字段 if 字段 not in 检查点数据]
+            
+            if 缺失字段:
+                return 检查点验证结果(
+                    有效=False,
+                    错误类型="数据格式错误",
+                    错误消息=f"检查点缺少必需字段: {', '.join(缺失字段)}"
+                )
+            
+            # 验证训练进度字段
+            训练进度 = 检查点数据.get('训练进度', {})
+            if '当前epoch' not in 训练进度 or '当前batch' not in 训练进度:
+                return 检查点验证结果(
+                    有效=False,
+                    错误类型="训练进度不完整",
+                    错误消息="检查点训练进度缺少 epoch 或 batch 信息"
+                )
+            
+        except pickle.UnpicklingError as e:
+            return 检查点验证结果(
+                有效=False,
+                错误类型="反序列化错误",
+                错误消息=f"检查点文件无法反序列化，可能已损坏: {e}"
+            )
+        except Exception as e:
+            return 检查点验证结果(
+                有效=False,
+                错误类型="未知错误",
+                错误消息=f"验证检查点时发生错误: {e}"
+            )
+        
+        return 检查点验证结果(有效=True)
+    
+    def 获取建议检查点(self, 排除路径: str = None) -> Optional[str]:
+        """
+        获取建议使用的备用检查点路径
+        
+        参数:
+            排除路径: 要排除的检查点路径（通常是损坏的检查点）
+            
+        返回:
+            建议的检查点路径，如果没有可用的返回 None
+        """
+        # 按 epoch 和 batch 排序，获取可用的检查点
+        可用检查点 = [
+            元数据 for 元数据 in self._元数据缓存
+            if 元数据.文件路径 != 排除路径 and os.path.exists(元数据.文件路径)
+        ]
+        
+        if not 可用检查点:
+            return None
+        
+        # 按 epoch 和 batch 倒序排序
+        可用检查点.sort(key=lambda x: (x.epoch, x.batch), reverse=True)
+        
+        # 验证每个检查点，返回第一个有效的
+        for 元数据 in 可用检查点:
+            验证结果 = self.验证检查点(元数据.文件路径)
+            if 验证结果.有效:
+                return 元数据.文件路径
+        
+        return None
+    
+    def 安全加载检查点(self, 检查点路径: str = None,
+                       epoch: int = None,
+                       时间戳: str = None,
+                       抛出异常: bool = False) -> Optional[dict]:
+        """
+        安全加载检查点，带完整的损坏检测和处理
+        
+        参数:
+            检查点路径: 指定检查点路径，None 则根据其他参数或加载最新
+            epoch: 指定要加载的 epoch 编号
+            时间戳: 指定要加载的时间戳（ISO格式字符串）
+            抛出异常: 如果为 True，损坏时抛出异常而不是返回 None
+            
+        返回:
+            检查点数据字典，加载失败返回 None
+            
+        异常:
+            检查点损坏错误: 当检查点损坏且 抛出异常=True 时
+        """
+        import pickle
+        
+        # 确定要加载的检查点路径
+        if 检查点路径 is None:
+            if epoch is not None:
+                检查点路径 = self._按epoch查找检查点(epoch)
+            elif 时间戳 is not None:
+                检查点路径 = self._按时间戳查找检查点(时间戳)
+            else:
+                检查点路径 = self._获取最新检查点路径()
+        
+        if 检查点路径 is None:
+            日志.warning("未找到可用的检查点")
+            return None
+        
+        # 验证检查点完整性
+        验证结果 = self.验证检查点(检查点路径)
+        
+        if not 验证结果.有效:
+            日志.error(f"检查点验证失败: {验证结果.错误消息}")
+            
+            # 获取建议的备用检查点
+            建议路径 = self.获取建议检查点(排除路径=检查点路径)
+            
+            if 抛出异常:
+                raise 检查点损坏错误(
+                    消息=验证结果.错误消息,
+                    损坏路径=检查点路径,
+                    建议检查点=建议路径
+                )
+            
+            # 尝试加载备用检查点
+            if 建议路径:
+                日志.info(f"尝试加载备用检查点: {建议路径}")
+                return self.安全加载检查点(检查点路径=建议路径, 抛出异常=抛出异常)
+            
+            return None
+        
+        # 加载检查点
+        try:
+            with open(检查点路径, 'rb') as f:
+                检查点数据 = pickle.load(f)
+            日志.info(f"检查点已安全加载: {检查点路径}")
+            return 检查点数据
+        except Exception as e:
+            日志.error(f"加载检查点失败: {e}")
+            
+            建议路径 = self.获取建议检查点(排除路径=检查点路径)
+            
+            if 抛出异常:
+                raise 检查点损坏错误(
+                    消息=f"加载检查点失败: {e}",
+                    损坏路径=检查点路径,
+                    建议检查点=建议路径
+                )
+            
+            if 建议路径:
+                日志.info(f"尝试加载备用检查点: {建议路径}")
+                return self.安全加载检查点(检查点路径=建议路径, 抛出异常=抛出异常)
+            
+            return None
 
 
 
 class 检查点损坏错误(Exception):
     """检查点文件损坏异常"""
-    pass
+    
+    def __init__(self, 消息: str, 损坏路径: str = None, 建议检查点: str = None):
+        """
+        初始化检查点损坏错误
+        
+        参数:
+            消息: 错误消息
+            损坏路径: 损坏的检查点文件路径
+            建议检查点: 建议使用的备用检查点路径
+        """
+        super().__init__(消息)
+        self.损坏路径 = 损坏路径
+        self.建议检查点 = 建议检查点
+    
+    def __str__(self):
+        基本消息 = super().__str__()
+        if self.建议检查点:
+            return f"{基本消息}\n建议使用更早的检查点: {self.建议检查点}"
+        return 基本消息
 
 
 class 模型不匹配错误(Exception):
     """模型结构不匹配异常"""
     pass
+
+
+class 检查点验证结果:
+    """检查点验证结果"""
+    
+    def __init__(self, 有效: bool, 错误类型: str = None, 错误消息: str = None):
+        """
+        初始化验证结果
+        
+        参数:
+            有效: 检查点是否有效
+            错误类型: 错误类型（如果无效）
+            错误消息: 错误消息（如果无效）
+        """
+        self.有效 = 有效
+        self.错误类型 = 错误类型
+        self.错误消息 = 错误消息
+    
+    def __bool__(self):
+        return self.有效
 
 
 def 恢复训练状态(模型, 检查点数据: dict) -> dict:
@@ -465,7 +784,7 @@ def 恢复训练状态(模型, 检查点数据: dict) -> dict:
         检查点数据: 检查点数据字典
     
     返回:
-        恢复信息字典，包含恢复的epoch和batch
+        恢复信息字典，包含恢复的epoch和batch，以及下一个batch信息
     
     异常:
         模型不匹配错误: 当模型结构与检查点不匹配时
@@ -509,6 +828,136 @@ def 恢复训练状态(模型, 检查点数据: dict) -> dict:
     return 恢复信息
 
 
+def 计算恢复起点(检查点数据: dict, 每epoch批次数: int = None) -> dict:
+    """
+    计算训练恢复的起点，确保从中断处的下一个 batch 继续
+    
+    参数:
+        检查点数据: 检查点数据字典
+        每epoch批次数: 每个 epoch 的批次数（用于判断是否需要进入下一个 epoch）
+    
+    返回:
+        恢复起点信息字典，包含:
+        - 起始epoch: 恢复训练应从哪个 epoch 开始
+        - 起始batch: 恢复训练应从哪个 batch 开始
+        - 中断epoch: 中断时的 epoch
+        - 中断batch: 中断时的 batch
+        - 是否新epoch: 是否需要从新的 epoch 开始
+    """
+    if 检查点数据 is None:
+        raise ValueError("检查点数据为空")
+    
+    训练进度 = 检查点数据.get('训练进度', {})
+    中断epoch = 训练进度.get('当前epoch', 0)
+    中断batch = 训练进度.get('当前batch', 0)
+    
+    # 计算下一个 batch
+    下一batch = 中断batch + 1
+    起始epoch = 中断epoch
+    是否新epoch = False
+    
+    # 如果提供了每 epoch 批次数，检查是否需要进入下一个 epoch
+    if 每epoch批次数 is not None and 下一batch >= 每epoch批次数:
+        起始epoch = 中断epoch + 1
+        下一batch = 0
+        是否新epoch = True
+    
+    恢复起点 = {
+        '起始epoch': 起始epoch,
+        '起始batch': 下一batch,
+        '中断epoch': 中断epoch,
+        '中断batch': 中断batch,
+        '是否新epoch': 是否新epoch
+    }
+    
+    日志.info(f"计算恢复起点: 从 epoch={起始epoch}, batch={下一batch} 继续 "
+              f"(中断于 epoch={中断epoch}, batch={中断batch})")
+    
+    return 恢复起点
+
+
+class 训练恢复器:
+    """
+    训练恢复器，封装训练恢复的完整流程
+    
+    确保训练从中断处的下一个 batch 继续，保证训练连续性
+    """
+    
+    def __init__(self, 管理器: 检查点管理器):
+        """
+        初始化训练恢复器
+        
+        参数:
+            管理器: 检查点管理器实例
+        """
+        self.管理器 = 管理器
+        self._恢复信息 = None
+        self._恢复起点 = None
+    
+    def 恢复(self, 模型, 检查点路径: str = None, 
+             每epoch批次数: int = None) -> Optional[dict]:
+        """
+        执行完整的训练恢复流程
+        
+        参数:
+            模型: 训练模型对象
+            检查点路径: 指定检查点路径，None 则加载最新
+            每epoch批次数: 每个 epoch 的批次数
+        
+        返回:
+            恢复结果字典，包含恢复信息和起点信息，失败返回 None
+        """
+        # 安全加载检查点
+        检查点数据 = self.管理器.安全加载检查点(检查点路径=检查点路径)
+        
+        if 检查点数据 is None:
+            日志.warning("无法加载检查点，恢复失败")
+            return None
+        
+        try:
+            # 恢复训练状态
+            self._恢复信息 = 恢复训练状态(模型, 检查点数据)
+            
+            # 计算恢复起点
+            self._恢复起点 = 计算恢复起点(检查点数据, 每epoch批次数)
+            
+            结果 = {
+                '恢复信息': self._恢复信息,
+                '恢复起点': self._恢复起点,
+                '检查点数据': 检查点数据
+            }
+            
+            日志.info(f"训练恢复成功: 将从 epoch={self._恢复起点['起始epoch']}, "
+                      f"batch={self._恢复起点['起始batch']} 继续")
+            
+            return 结果
+            
+        except Exception as e:
+            日志.error(f"训练恢复失败: {e}")
+            return None
+    
+    @property
+    def 起始epoch(self) -> int:
+        """获取恢复后的起始 epoch"""
+        if self._恢复起点 is None:
+            raise ValueError("尚未执行恢复操作")
+        return self._恢复起点['起始epoch']
+    
+    @property
+    def 起始batch(self) -> int:
+        """获取恢复后的起始 batch"""
+        if self._恢复起点 is None:
+            raise ValueError("尚未执行恢复操作")
+        return self._恢复起点['起始batch']
+    
+    @property
+    def 优化器状态(self) -> dict:
+        """获取恢复的优化器状态"""
+        if self._恢复信息 is None:
+            raise ValueError("尚未执行恢复操作")
+        return self._恢复信息.get('优化器状态', {})
+
+
 def 提示恢复训练(管理器: 检查点管理器) -> bool:
     """
     提示用户是否恢复训练
@@ -529,7 +978,7 @@ def 提示恢复训练(管理器: 检查点管理器) -> bool:
         print("🔄 发现训练检查点")
         print("=" * 50)
         print(f"  创建时间: {最新信息['创建时间']}")
-        print(f"  训练进度: Epoch {最新信息['epoch']}, Batch {最新信息['batch']}")
+        print(f"  训练进度: Epoch {最新信息['epoch'] + 1}, Batch {最新信息['batch'] + 1}")
         print(f"  Loss: {最新信息['loss']:.4f}" if 最新信息['loss'] else "  Loss: N/A")
         print(f"  文件大小: {最新信息['文件大小_可读']}")
         print()
@@ -544,6 +993,117 @@ def 提示恢复训练(管理器: 检查点管理器) -> bool:
                 print("请输入 y 或 n")
     
     return False
+
+
+def 自动检测并恢复(管理器: 检查点管理器, 静默模式: bool = False) -> dict:
+    """
+    自动检测检查点并提示用户选择恢复方式
+    
+    参数:
+        管理器: 检查点管理器实例
+        静默模式: 如果为 True，自动选择最新检查点恢复，不提示用户
+    
+    返回:
+        恢复信息字典，包含:
+        - 需要恢复: bool，是否需要恢复训练
+        - 检查点路径: str，选择的检查点路径（如果需要恢复）
+        - 检查点信息: dict，检查点元数据（如果需要恢复）
+    """
+    结果 = {
+        '需要恢复': False,
+        '检查点路径': None,
+        '检查点信息': None
+    }
+    
+    # 检查是否存在检查点
+    if not 管理器.检查点存在():
+        if not 静默模式:
+            print("📝 未发现训练检查点，将从头开始训练")
+        return 结果
+    
+    # 获取所有检查点
+    检查点列表 = 管理器.列出检查点()
+    
+    if not 检查点列表:
+        return 结果
+    
+    # 静默模式：自动选择最新检查点
+    if 静默模式:
+        结果['需要恢复'] = True
+        结果['检查点路径'] = 检查点列表[0]['文件路径']
+        结果['检查点信息'] = 检查点列表[0]
+        return 结果
+    
+    # 交互模式：显示检查点列表并让用户选择
+    print("\n" + "=" * 60)
+    print("🔄 发现训练检查点")
+    print("=" * 60)
+    
+    # 显示检查点列表
+    print("\n可用检查点:")
+    print("-" * 60)
+    print(f"{'序号':<4} {'Epoch':<8} {'Batch':<8} {'Loss':<12} {'创建时间'}")
+    print("-" * 60)
+    
+    for i, 检查点 in enumerate(检查点列表, 1):
+        loss_str = f"{检查点['loss']:.4f}" if 检查点['loss'] else "N/A"
+        时间 = 检查点['创建时间'][:19].replace('T', ' ')
+        print(f"{i:<4} {检查点['epoch'] + 1:<8} {检查点['batch'] + 1:<8} {loss_str:<12} {时间}")
+    
+    print("-" * 60)
+    print(f"\n共 {len(检查点列表)} 个检查点可用")
+    print()
+    
+    # 提示用户选择
+    while True:
+        print("请选择操作:")
+        print("  [1] 从最新检查点恢复 (推荐)")
+        print("  [2] 选择特定检查点恢复")
+        print("  [3] 重新开始训练 (将覆盖现有进度)")
+        print()
+        
+        选择 = input("请输入选项 (1/2/3): ").strip()
+        
+        if 选择 == '1':
+            # 从最新检查点恢复
+            结果['需要恢复'] = True
+            结果['检查点路径'] = 检查点列表[0]['文件路径']
+            结果['检查点信息'] = 检查点列表[0]
+            print(f"\n✅ 将从最新检查点恢复: Epoch {检查点列表[0]['epoch'] + 1}, Batch {检查点列表[0]['batch'] + 1}")
+            break
+            
+        elif 选择 == '2':
+            # 选择特定检查点
+            while True:
+                序号输入 = input(f"请输入检查点序号 (1-{len(检查点列表)}): ").strip()
+                try:
+                    序号 = int(序号输入)
+                    if 1 <= 序号 <= len(检查点列表):
+                        选中检查点 = 检查点列表[序号 - 1]
+                        结果['需要恢复'] = True
+                        结果['检查点路径'] = 选中检查点['文件路径']
+                        结果['检查点信息'] = 选中检查点
+                        print(f"\n✅ 将从检查点恢复: Epoch {选中检查点['epoch'] + 1}, Batch {选中检查点['batch'] + 1}")
+                        break
+                    else:
+                        print(f"请输入 1 到 {len(检查点列表)} 之间的数字")
+                except ValueError:
+                    print("请输入有效的数字")
+            break
+            
+        elif 选择 == '3':
+            # 重新开始
+            确认 = input("\n⚠️  确定要重新开始训练吗？现有检查点将不会被使用 (y/n): ").strip().lower()
+            if 确认 in ['y', 'yes', '是']:
+                print("\n📝 将从头开始训练")
+                break
+            else:
+                print("已取消，请重新选择\n")
+                continue
+        else:
+            print("请输入有效的选项 (1/2/3)\n")
+    
+    return 结果
 
 
 def 显示检查点列表(管理器: 检查点管理器):

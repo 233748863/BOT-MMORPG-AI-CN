@@ -168,6 +168,77 @@ class 窗口查找器:
             是否可见=是否可见, 是否最小化=是否最小化
         )
 
+    def 获取窗口缩略图(self, 句柄: int, 大小: Tuple[int, int] = (200, 150)) -> Optional[Any]:
+        """
+        获取窗口缩略图
+        
+        参数:
+            句柄: 窗口句柄
+            大小: 缩略图大小 (宽度, 高度)
+            
+        返回:
+            缩略图图像 (numpy 数组)，失败返回 None
+        """
+        try:
+            import numpy as np
+            from PIL import Image
+            import win32gui
+            import win32ui
+            import win32con
+            
+            if not self._user32.IsWindow(句柄):
+                return None
+            
+            # 获取窗口尺寸
+            矩形 = ctypes.wintypes.RECT()
+            self._user32.GetWindowRect(句柄, ctypes.byref(矩形))
+            宽度 = 矩形.right - 矩形.left
+            高度 = 矩形.bottom - 矩形.top
+            
+            if 宽度 <= 0 or 高度 <= 0:
+                return None
+            
+            # 创建设备上下文
+            窗口DC = win32gui.GetWindowDC(句柄)
+            内存DC = win32ui.CreateDCFromHandle(窗口DC)
+            兼容DC = 内存DC.CreateCompatibleDC()
+            
+            # 创建位图
+            位图 = win32ui.CreateBitmap()
+            位图.CreateCompatibleBitmap(内存DC, 宽度, 高度)
+            兼容DC.SelectObject(位图)
+            
+            # 复制窗口内容
+            兼容DC.BitBlt((0, 0), (宽度, 高度), 内存DC, (0, 0), win32con.SRCCOPY)
+            
+            # 转换为 numpy 数组
+            位图信息 = 位图.GetInfo()
+            位图数据 = 位图.GetBitmapBits(True)
+            
+            图像 = np.frombuffer(位图数据, dtype=np.uint8)
+            图像 = 图像.reshape((位图信息['bmHeight'], 位图信息['bmWidth'], 4))
+            图像 = 图像[:, :, :3]  # 移除 alpha 通道
+            图像 = 图像[:, :, ::-1]  # BGR -> RGB
+            
+            # 清理资源
+            win32gui.DeleteObject(位图.GetHandle())
+            兼容DC.DeleteDC()
+            内存DC.DeleteDC()
+            win32gui.ReleaseDC(句柄, 窗口DC)
+            
+            # 缩放到指定大小
+            PIL图像 = Image.fromarray(图像)
+            PIL图像 = PIL图像.resize(大小, Image.Resampling.LANCZOS)
+            
+            return np.array(PIL图像)
+            
+        except ImportError:
+            日志.warning("获取缩略图需要安装 pywin32 和 Pillow 库")
+            return None
+        except Exception as e:
+            日志.error(f"获取窗口缩略图失败: {e}")
+            return None
+
     def _获取进程名(self, 进程ID: int) -> str:
         """获取进程名称"""
         try:
@@ -203,94 +274,319 @@ class 窗口查找器:
         return self.获取窗口信息(顶层句柄 or 句柄)
 
 
-class 窗口跟踪器:
-    """跟踪窗口位置变化"""
+@dataclass
+class 窗口变化事件:
+    """窗口变化事件数据类"""
+    类型: str  # "移动" / "调整大小" / "关闭"
+    窗口信息: Optional[窗口信息]
+    旧位置: Optional[Tuple[int, int]] = None
+    新位置: Optional[Tuple[int, int]] = None
+    旧大小: Optional[Tuple[int, int]] = None
+    新大小: Optional[Tuple[int, int]] = None
+    时间戳: str = ""
     
-    def __init__(self, 句柄: int, 回调: Callable[[窗口信息], None] = None):
+    def __post_init__(self):
+        if not self.时间戳:
+            self.时间戳 = datetime.now().isoformat()
+
+
+class 窗口跟踪器:
+    """
+    跟踪窗口位置变化
+    
+    功能:
+    - 后台线程持续跟踪窗口状态
+    - 检测窗口位置变化
+    - 检测窗口大小变化
+    - 检测窗口关闭
+    - 通过回调通知变化事件
+    """
+    
+    def __init__(self, 句柄: int, 
+                 位置变化回调: Callable[[窗口变化事件], None] = None,
+                 大小变化回调: Callable[[窗口变化事件], None] = None,
+                 窗口关闭回调: Callable[[窗口变化事件], None] = None,
+                 通用回调: Callable[[窗口信息], None] = None):
         """
         初始化跟踪器
         
         参数:
             句柄: 要跟踪的窗口句柄
-            回调: 位置变化时的回调函数
+            位置变化回调: 窗口位置变化时的回调函数
+            大小变化回调: 窗口大小变化时的回调函数
+            窗口关闭回调: 窗口关闭时的回调函数
+            通用回调: 任何变化时的回调函数（兼容旧接口）
         """
         self._句柄 = 句柄
-        self._回调 = 回调
+        self._位置变化回调 = 位置变化回调
+        self._大小变化回调 = 大小变化回调
+        self._窗口关闭回调 = 窗口关闭回调
+        self._通用回调 = 通用回调
         self._查找器 = 窗口查找器()
         self._运行中 = False
         self._线程: Optional[threading.Thread] = None
-        self._上次位置: Optional[Tuple[int, int, int, int]] = None
+        self._上次位置: Optional[Tuple[int, int]] = None
+        self._上次大小: Optional[Tuple[int, int]] = None
+        self._上次区域: Optional[Tuple[int, int, int, int]] = None
         self._检查间隔 = 0.5  # 秒
+        self._锁 = threading.Lock()
+        self._变化历史: List[窗口变化事件] = []
+        self._最大历史记录 = 100
+        
+        # 初始化位置信息
+        self._初始化位置()
+    
+    def _初始化位置(self):
+        """初始化窗口位置信息"""
+        信息 = self._查找器.获取窗口信息(self._句柄)
+        if 信息:
+            self._上次位置 = 信息.位置
+            self._上次大小 = 信息.大小
+            self._上次区域 = 信息.获取区域()
+    
+    @property
+    def 句柄(self) -> int:
+        """获取跟踪的窗口句柄"""
+        return self._句柄
+    
+    @property
+    def 是否运行中(self) -> bool:
+        """检查跟踪器是否正在运行"""
+        return self._运行中
+    
+    @property
+    def 检查间隔(self) -> float:
+        """获取检查间隔（秒）"""
+        return self._检查间隔
+    
+    @检查间隔.setter
+    def 检查间隔(self, 值: float):
+        """设置检查间隔（秒）"""
+        if 值 > 0:
+            self._检查间隔 = 值
     
     def 启动(self):
         """启动位置跟踪（后台线程）"""
         if self._运行中:
+            日志.warning("跟踪器已在运行中")
+            return
+        
+        if not self.窗口是否存在():
+            日志.error("窗口不存在，无法启动跟踪")
             return
         
         self._运行中 = True
-        self._线程 = threading.Thread(target=self._跟踪循环, daemon=True)
+        self._初始化位置()
+        self._线程 = threading.Thread(target=self._跟踪循环, daemon=True, name="窗口跟踪线程")
         self._线程.start()
         日志.info(f"窗口跟踪已启动: 句柄={self._句柄}")
     
     def 停止(self):
         """停止位置跟踪"""
+        if not self._运行中:
+            return
+        
         self._运行中 = False
-        if self._线程:
-            self._线程.join(timeout=1.0)
+        if self._线程 and self._线程.is_alive():
+            self._线程.join(timeout=2.0)
+        self._线程 = None
         日志.info("窗口跟踪已停止")
     
     def _跟踪循环(self):
-        """跟踪循环"""
+        """跟踪循环 - 后台线程执行"""
         while self._运行中:
             try:
-                信息 = self._查找器.获取窗口信息(self._句柄)
-                
-                if 信息 is None:
-                    日志.warning("跟踪的窗口已关闭")
-                    self._运行中 = False
-                    break
-                
-                当前位置 = 信息.获取区域()
-                
-                if self._上次位置 != 当前位置:
-                    self._上次位置 = 当前位置
-                    if self._回调:
-                        self._回调(信息)
-                
+                self._检查窗口状态()
                 time.sleep(self._检查间隔)
-                
             except Exception as e:
                 日志.error(f"跟踪错误: {e}")
                 time.sleep(1.0)
     
+    def _检查窗口状态(self):
+        """检查窗口状态变化"""
+        # 检查窗口是否存在
+        if not self.窗口是否存在():
+            self._处理窗口关闭()
+            return
+        
+        信息 = self._查找器.获取窗口信息(self._句柄)
+        if 信息 is None:
+            self._处理窗口关闭()
+            return
+        
+        当前位置 = 信息.位置
+        当前大小 = 信息.大小
+        
+        位置已变化 = False
+        大小已变化 = False
+        
+        with self._锁:
+            # 检测位置变化
+            if self._上次位置 and 当前位置 != self._上次位置:
+                位置已变化 = True
+                事件 = 窗口变化事件(
+                    类型="移动",
+                    窗口信息=信息,
+                    旧位置=self._上次位置,
+                    新位置=当前位置
+                )
+                self._记录事件(事件)
+                self._触发位置变化回调(事件)
+            
+            # 检测大小变化
+            if self._上次大小 and 当前大小 != self._上次大小:
+                大小已变化 = True
+                事件 = 窗口变化事件(
+                    类型="调整大小",
+                    窗口信息=信息,
+                    旧大小=self._上次大小,
+                    新大小=当前大小
+                )
+                self._记录事件(事件)
+                self._触发大小变化回调(事件)
+            
+            # 更新记录
+            self._上次位置 = 当前位置
+            self._上次大小 = 当前大小
+            self._上次区域 = 信息.获取区域()
+        
+        # 触发通用回调
+        if (位置已变化 or 大小已变化) and self._通用回调:
+            try:
+                self._通用回调(信息)
+            except Exception as e:
+                日志.error(f"通用回调执行失败: {e}")
+    
+    def _处理窗口关闭(self):
+        """处理窗口关闭事件"""
+        日志.warning("跟踪的窗口已关闭")
+        
+        事件 = 窗口变化事件(
+            类型="关闭",
+            窗口信息=None,
+            旧位置=self._上次位置,
+            旧大小=self._上次大小
+        )
+        self._记录事件(事件)
+        
+        if self._窗口关闭回调:
+            try:
+                self._窗口关闭回调(事件)
+            except Exception as e:
+                日志.error(f"窗口关闭回调执行失败: {e}")
+        
+        self._运行中 = False
+    
+    def _触发位置变化回调(self, 事件: 窗口变化事件):
+        """触发位置变化回调"""
+        日志.info(f"窗口位置变化: {事件.旧位置} -> {事件.新位置}")
+        if self._位置变化回调:
+            try:
+                self._位置变化回调(事件)
+            except Exception as e:
+                日志.error(f"位置变化回调执行失败: {e}")
+    
+    def _触发大小变化回调(self, 事件: 窗口变化事件):
+        """触发大小变化回调"""
+        日志.info(f"窗口大小变化: {事件.旧大小} -> {事件.新大小}")
+        if self._大小变化回调:
+            try:
+                self._大小变化回调(事件)
+            except Exception as e:
+                日志.error(f"大小变化回调执行失败: {e}")
+    
+    def _记录事件(self, 事件: 窗口变化事件):
+        """记录变化事件到历史"""
+        self._变化历史.append(事件)
+        # 限制历史记录数量
+        if len(self._变化历史) > self._最大历史记录:
+            self._变化历史 = self._变化历史[-self._最大历史记录:]
+    
     def 获取当前位置(self) -> Optional[Tuple[int, int, int, int]]:
-        """获取窗口当前位置 (x, y, width, height)"""
+        """
+        获取窗口当前位置
+        
+        返回:
+            (x, y, width, height) 或 None
+        """
         信息 = self._查找器.获取窗口信息(self._句柄)
         if 信息:
             return 信息.获取区域()
         return None
+    
+    def 获取当前窗口信息(self) -> Optional[窗口信息]:
+        """获取当前窗口的完整信息"""
+        return self._查找器.获取窗口信息(self._句柄)
     
     def 窗口是否存在(self) -> bool:
         """检查窗口是否仍然存在"""
         return ctypes.windll.user32.IsWindow(self._句柄) != 0
     
     def 窗口是否移动(self) -> bool:
-        """检查窗口是否移动"""
+        """
+        检查窗口是否已移动（相对于上次记录的位置）
+        
+        返回:
+            True 如果位置已变化
+        """
         当前位置 = self.获取当前位置()
         if 当前位置 and self._上次位置:
-            return 当前位置[:2] != self._上次位置[:2]
+            return 当前位置[:2] != self._上次位置
         return False
+    
+    def 窗口是否调整大小(self) -> bool:
+        """
+        检查窗口是否已调整大小（相对于上次记录的大小）
+        
+        返回:
+            True 如果大小已变化
+        """
+        当前位置 = self.获取当前位置()
+        if 当前位置 and self._上次大小:
+            当前大小 = (当前位置[2], 当前位置[3])
+            return 当前大小 != self._上次大小
+        return False
+    
+    def 获取变化历史(self, 数量: int = 10) -> List[窗口变化事件]:
+        """
+        获取最近的变化历史
+        
+        参数:
+            数量: 返回的历史记录数量
+            
+        返回:
+            变化事件列表
+        """
+        with self._锁:
+            return self._变化历史[-数量:]
+    
+    def 清除历史(self):
+        """清除变化历史"""
+        with self._锁:
+            self._变化历史.clear()
+    
+    def 获取上次位置(self) -> Optional[Tuple[int, int]]:
+        """获取上次记录的位置"""
+        return self._上次位置
+    
+    def 获取上次大小(self) -> Optional[Tuple[int, int]]:
+        """获取上次记录的大小"""
+        return self._上次大小
+    
+    def 获取上次区域(self) -> Optional[Tuple[int, int, int, int]]:
+        """获取上次记录的完整区域 (x, y, width, height)"""
+        return self._上次区域
 
 
 class 窗口选择器:
-    """窗口选择界面"""
+    """窗口选择界面（命令行版本）"""
     
     def __init__(self, 查找器: 窗口查找器 = None):
         self._查找器 = 查找器 or 窗口查找器()
     
     def 显示列表(self, 过滤关键词: str = None) -> Optional[int]:
         """
-        显示窗口列表供用户选择
+        显示窗口列表供用户选择（命令行版本）
         
         参数:
             过滤关键词: 过滤窗口的关键词
@@ -343,7 +639,7 @@ class 窗口选择器:
     
     def 点击选择模式(self, 倒计时: int = 3) -> Optional[int]:
         """
-        启动点击选择模式
+        启动点击选择模式（命令行版本）
         
         参数:
             倒计时: 进入选择模式前的倒计时秒数
@@ -376,7 +672,7 @@ class 窗口选择器:
         return None
     
     def 确认选择(self, 句柄: int) -> bool:
-        """确认窗口选择"""
+        """确认窗口选择（命令行版本）"""
         信息 = self._查找器.获取窗口信息(句柄)
         
         if not 信息:
@@ -392,52 +688,263 @@ class 窗口选择器:
         return 确认 == 'y'
 
 
+@dataclass
+class 窗口配置项:
+    """窗口配置数据类"""
+    标识: str
+    标识类型: str  # "process" 或 "title"
+    标识值: str
+    上次位置: Tuple[int, int, int, int]  # (x, y, width, height)
+    进程名: str
+    标题: str
+    上次使用: str
+    别名: str = ""  # 用户自定义别名
+    备注: str = ""  # 用户备注
+    
+    def to_dict(self) -> dict:
+        """转换为字典"""
+        return {
+            "标识类型": self.标识类型,
+            "标识值": self.标识值,
+            "上次位置": list(self.上次位置),
+            "进程名": self.进程名,
+            "标题": self.标题,
+            "上次使用": self.上次使用,
+            "别名": self.别名,
+            "备注": self.备注
+        }
+    
+    @classmethod
+    def from_dict(cls, 标识: str, 数据: dict) -> '窗口配置项':
+        """从字典创建配置项"""
+        return cls(
+            标识=标识,
+            标识类型=数据.get("标识类型", "process"),
+            标识值=数据.get("标识值", 标识),
+            上次位置=tuple(数据.get("上次位置", [0, 0, 800, 600])),
+            进程名=数据.get("进程名", ""),
+            标题=数据.get("标题", ""),
+            上次使用=数据.get("上次使用", ""),
+            别名=数据.get("别名", ""),
+            备注=数据.get("备注", "")
+        )
+
+
 class 窗口配置管理器:
-    """管理窗口配置的保存和加载"""
+    """
+    管理窗口配置的保存和加载
+    
+    功能:
+    - 保存和加载窗口配置
+    - 支持多配置管理（为不同游戏保存配置）
+    - 设置默认配置
+    - 配置验证和迁移
+    - 配置备份和恢复
+    
+    需求: 4.1, 4.2, 4.3, 4.4
+    """
+    
+    # 配置文件版本，用于迁移
+    _配置版本 = "1.0"
     
     def __init__(self, 配置路径: str = "配置/窗口配置.json"):
+        """
+        初始化配置管理器
+        
+        参数:
+            配置路径: 配置文件路径
+        """
         self._配置路径 = 配置路径
-        self._配置: Dict = {"默认": None, "配置列表": {}}
+        self._配置: Dict = self._创建空配置()
         self._加载配置文件()
+    
+    def _创建空配置(self) -> Dict:
+        """创建空配置结构"""
+        return {
+            "版本": self._配置版本,
+            "默认": None,
+            "配置列表": {}
+        }
     
     def _加载配置文件(self):
         """加载配置文件"""
         if os.path.exists(self._配置路径):
             try:
                 with open(self._配置路径, 'r', encoding='utf-8') as f:
-                    self._配置 = json.load(f)
+                    加载的配置 = json.load(f)
+                
+                # 验证并迁移配置
+                self._配置 = self._验证并迁移配置(加载的配置)
+                日志.info(f"窗口配置已加载: {self._配置路径}")
+                
+            except json.JSONDecodeError as e:
+                日志.warning(f"配置文件格式错误，使用默认配置: {e}")
+                self._配置 = self._创建空配置()
             except Exception as e:
-                日志.warning(f"加载窗口配置失败: {e}")
+                日志.warning(f"加载窗口配置失败，使用默认配置: {e}")
+                self._配置 = self._创建空配置()
+        else:
+            日志.info("窗口配置文件不存在，将创建新配置")
     
-    def _保存配置文件(self):
-        """保存配置文件"""
+    def _验证并迁移配置(self, 配置: Dict) -> Dict:
+        """
+        验证配置格式并进行必要的迁移
+        
+        参数:
+            配置: 加载的配置字典
+            
+        返回:
+            验证/迁移后的配置
+        """
+        # 确保基本结构存在
+        if not isinstance(配置, dict):
+            return self._创建空配置()
+        
+        # 添加缺失的字段
+        if "版本" not in 配置:
+            配置["版本"] = "0.9"  # 旧版本
+        
+        if "默认" not in 配置:
+            配置["默认"] = None
+        
+        if "配置列表" not in 配置:
+            配置["配置列表"] = {}
+        
+        # 迁移旧版本配置
+        if 配置.get("版本") != self._配置版本:
+            配置 = self._迁移配置(配置)
+        
+        # 验证配置列表中的每个项目
+        有效配置列表 = {}
+        for 标识, 项目 in 配置.get("配置列表", {}).items():
+            if self._验证配置项(项目):
+                有效配置列表[标识] = 项目
+            else:
+                日志.warning(f"配置项验证失败，已跳过: {标识}")
+        
+        配置["配置列表"] = 有效配置列表
+        
+        # 验证默认配置是否存在
+        if 配置.get("默认") and 配置["默认"] not in 配置["配置列表"]:
+            日志.warning(f"默认配置不存在，已清除: {配置['默认']}")
+            配置["默认"] = None
+        
+        return 配置
+    
+    def _迁移配置(self, 配置: Dict) -> Dict:
+        """
+        迁移旧版本配置到新版本
+        
+        参数:
+            配置: 旧版本配置
+            
+        返回:
+            迁移后的配置
+        """
+        旧版本 = 配置.get("版本", "0.9")
+        日志.info(f"迁移配置: {旧版本} -> {self._配置版本}")
+        
+        # 为旧配置项添加新字段
+        for 标识, 项目 in 配置.get("配置列表", {}).items():
+            if "别名" not in 项目:
+                项目["别名"] = ""
+            if "备注" not in 项目:
+                项目["备注"] = ""
+        
+        配置["版本"] = self._配置版本
+        return 配置
+    
+    def _验证配置项(self, 项目: Dict) -> bool:
+        """
+        验证单个配置项是否有效
+        
+        参数:
+            项目: 配置项字典
+            
+        返回:
+            是否有效
+        """
+        必需字段 = ["标识类型", "标识值"]
+        
+        for 字段 in 必需字段:
+            if 字段 not in 项目:
+                return False
+        
+        # 验证标识类型
+        if 项目.get("标识类型") not in ["process", "title"]:
+            return False
+        
+        # 验证位置格式
+        位置 = 项目.get("上次位置")
+        if 位置 and (not isinstance(位置, (list, tuple)) or len(位置) != 4):
+            return False
+        
+        return True
+    
+    def _保存配置文件(self) -> bool:
+        """
+        保存配置文件
+        
+        返回:
+            是否保存成功
+        """
         try:
-            os.makedirs(os.path.dirname(self._配置路径), exist_ok=True)
+            # 确保目录存在
+            目录 = os.path.dirname(self._配置路径)
+            if 目录:
+                os.makedirs(目录, exist_ok=True)
+            
+            # 写入配置文件
             with open(self._配置路径, 'w', encoding='utf-8') as f:
                 json.dump(self._配置, f, ensure_ascii=False, indent=2)
+            
+            日志.debug(f"窗口配置已保存: {self._配置路径}")
+            return True
+            
         except Exception as e:
             日志.error(f"保存窗口配置失败: {e}")
+            return False
     
-    def 保存配置(self, 窗口标识: str, 窗口信息: 窗口信息):
+    def 保存配置(self, 窗口标识: str, 窗口信息: 窗口信息, 
+                别名: str = "", 备注: str = "") -> bool:
         """
         保存窗口配置
         
         参数:
             窗口标识: 窗口标识符（进程名或标题）
             窗口信息: 窗口信息对象
+            别名: 用户自定义别名（可选）
+            备注: 用户备注（可选）
+            
+        返回:
+            是否保存成功
+            
+        需求: 4.1
         """
+        if not 窗口标识 or not 窗口信息:
+            日志.error("窗口标识和窗口信息不能为空")
+            return False
+        
+        # 确定标识类型
+        标识类型 = "process" if 窗口标识 == 窗口信息.进程名 else "title"
+        
         配置项 = {
-            "标识类型": "process" if 窗口标识 == 窗口信息.进程名 else "title",
+            "标识类型": 标识类型,
             "标识值": 窗口标识,
             "上次位置": list(窗口信息.获取区域()),
             "进程名": 窗口信息.进程名,
             "标题": 窗口信息.标题,
-            "上次使用": datetime.now().isoformat()
+            "上次使用": datetime.now().isoformat(),
+            "别名": 别名,
+            "备注": 备注
         }
         
         self._配置["配置列表"][窗口标识] = 配置项
-        self._保存配置文件()
-        日志.info(f"窗口配置已保存: {窗口标识}")
+        
+        if self._保存配置文件():
+            日志.info(f"窗口配置已保存: {窗口标识}")
+            return True
+        return False
     
     def 加载配置(self, 窗口标识: str = None) -> Optional[Dict]:
         """
@@ -447,43 +954,357 @@ class 窗口配置管理器:
             窗口标识: 窗口标识符，None 表示加载默认配置
             
         返回:
-            窗口配置字典
+            窗口配置字典，未找到返回 None
+            
+        需求: 4.2
         """
+        # 如果未指定标识，使用默认配置
         if 窗口标识 is None:
             窗口标识 = self._配置.get("默认")
         
         if 窗口标识 is None:
+            日志.debug("未指定窗口标识且无默认配置")
             return None
         
-        return self._配置.get("配置列表", {}).get(窗口标识)
+        配置 = self._配置.get("配置列表", {}).get(窗口标识)
+        
+        if 配置:
+            # 更新上次使用时间
+            配置["上次使用"] = datetime.now().isoformat()
+            self._保存配置文件()
+            日志.info(f"已加载窗口配置: {窗口标识}")
+        else:
+            日志.warning(f"未找到窗口配置: {窗口标识}")
+        
+        return 配置
+    
+    def 获取配置项(self, 窗口标识: str) -> Optional[窗口配置项]:
+        """
+        获取配置项对象
+        
+        参数:
+            窗口标识: 窗口标识符
+            
+        返回:
+            窗口配置项对象
+        """
+        配置 = self._配置.get("配置列表", {}).get(窗口标识)
+        if 配置:
+            return 窗口配置项.from_dict(窗口标识, 配置)
+        return None
     
     def 获取所有配置(self) -> List[Dict]:
-        """获取所有保存的窗口配置"""
+        """
+        获取所有保存的窗口配置
+        
+        返回:
+            配置列表，每个配置包含 "标识" 字段
+            
+        需求: 4.3
+        """
         配置列表 = []
         for 标识, 配置 in self._配置.get("配置列表", {}).items():
-            配置["标识"] = 标识
-            配置列表.append(配置)
+            配置副本 = 配置.copy()
+            配置副本["标识"] = 标识
+            配置列表.append(配置副本)
+        
+        # 按上次使用时间排序（最近使用的在前）
+        配置列表.sort(key=lambda x: x.get("上次使用", ""), reverse=True)
+        
         return 配置列表
     
-    def 删除配置(self, 窗口标识: str):
-        """删除指定窗口配置"""
-        if 窗口标识 in self._配置.get("配置列表", {}):
-            del self._配置["配置列表"][窗口标识]
-            if self._配置.get("默认") == 窗口标识:
-                self._配置["默认"] = None
-            self._保存配置文件()
-            日志.info(f"窗口配置已删除: {窗口标识}")
+    def 获取所有配置项(self) -> List[窗口配置项]:
+        """
+        获取所有配置项对象
+        
+        返回:
+            窗口配置项对象列表
+        """
+        配置项列表 = []
+        for 标识, 配置 in self._配置.get("配置列表", {}).items():
+            配置项列表.append(窗口配置项.from_dict(标识, 配置))
+        return 配置项列表
     
-    def 设置默认(self, 窗口标识: str):
-        """设置默认窗口配置"""
-        if 窗口标识 in self._配置.get("配置列表", {}):
-            self._配置["默认"] = 窗口标识
-            self._保存配置文件()
+    def 删除配置(self, 窗口标识: str) -> bool:
+        """
+        删除指定窗口配置
+        
+        参数:
+            窗口标识: 窗口标识符
+            
+        返回:
+            是否删除成功
+        """
+        if 窗口标识 not in self._配置.get("配置列表", {}):
+            日志.warning(f"配置不存在: {窗口标识}")
+            return False
+        
+        del self._配置["配置列表"][窗口标识]
+        
+        # 如果删除的是默认配置，清除默认设置
+        if self._配置.get("默认") == 窗口标识:
+            self._配置["默认"] = None
+        
+        if self._保存配置文件():
+            日志.info(f"窗口配置已删除: {窗口标识}")
+            return True
+        return False
+    
+    def 设置默认(self, 窗口标识: str) -> bool:
+        """
+        设置默认窗口配置
+        
+        参数:
+            窗口标识: 窗口标识符
+            
+        返回:
+            是否设置成功
+            
+        需求: 4.4
+        """
+        if 窗口标识 not in self._配置.get("配置列表", {}):
+            日志.warning(f"配置不存在，无法设置为默认: {窗口标识}")
+            return False
+        
+        self._配置["默认"] = 窗口标识
+        
+        if self._保存配置文件():
             日志.info(f"默认窗口已设置: {窗口标识}")
+            return True
+        return False
+    
+    def 获取默认配置(self) -> Optional[str]:
+        """
+        获取默认配置的标识
+        
+        返回:
+            默认配置的窗口标识，未设置返回 None
+        """
+        return self._配置.get("默认")
+    
+    def 清除默认(self) -> bool:
+        """
+        清除默认配置设置
+        
+        返回:
+            是否清除成功
+        """
+        self._配置["默认"] = None
+        return self._保存配置文件()
+    
+    def 配置是否存在(self, 窗口标识: str) -> bool:
+        """
+        检查配置是否存在
+        
+        参数:
+            窗口标识: 窗口标识符
+            
+        返回:
+            是否存在
+        """
+        return 窗口标识 in self._配置.get("配置列表", {})
+    
+    def 获取配置数量(self) -> int:
+        """
+        获取保存的配置数量
+        
+        返回:
+            配置数量
+        """
+        return len(self._配置.get("配置列表", {}))
+    
+    def 更新配置(self, 窗口标识: str, 更新内容: Dict) -> bool:
+        """
+        更新现有配置
+        
+        参数:
+            窗口标识: 窗口标识符
+            更新内容: 要更新的字段字典
+            
+        返回:
+            是否更新成功
+        """
+        if 窗口标识 not in self._配置.get("配置列表", {}):
+            日志.warning(f"配置不存在: {窗口标识}")
+            return False
+        
+        # 更新允许的字段
+        允许更新的字段 = ["别名", "备注", "上次位置"]
+        
+        for 字段, 值 in 更新内容.items():
+            if 字段 in 允许更新的字段:
+                self._配置["配置列表"][窗口标识][字段] = 值
+        
+        # 更新修改时间
+        self._配置["配置列表"][窗口标识]["上次使用"] = datetime.now().isoformat()
+        
+        return self._保存配置文件()
+    
+    def 重命名配置(self, 旧标识: str, 新标识: str) -> bool:
+        """
+        重命名配置标识
+        
+        参数:
+            旧标识: 原窗口标识
+            新标识: 新窗口标识
+            
+        返回:
+            是否重命名成功
+        """
+        if 旧标识 not in self._配置.get("配置列表", {}):
+            日志.warning(f"配置不存在: {旧标识}")
+            return False
+        
+        if 新标识 in self._配置.get("配置列表", {}):
+            日志.warning(f"新标识已存在: {新标识}")
+            return False
+        
+        # 移动配置
+        配置 = self._配置["配置列表"].pop(旧标识)
+        配置["标识值"] = 新标识
+        self._配置["配置列表"][新标识] = 配置
+        
+        # 更新默认配置引用
+        if self._配置.get("默认") == 旧标识:
+            self._配置["默认"] = 新标识
+        
+        if self._保存配置文件():
+            日志.info(f"配置已重命名: {旧标识} -> {新标识}")
+            return True
+        return False
+    
+    def 导出配置(self, 导出路径: str = None) -> Optional[str]:
+        """
+        导出所有配置到文件
+        
+        参数:
+            导出路径: 导出文件路径，None 则使用默认路径
+            
+        返回:
+            导出文件路径，失败返回 None
+        """
+        if 导出路径 is None:
+            时间戳 = datetime.now().strftime("%Y%m%d_%H%M%S")
+            导出路径 = f"配置/窗口配置_备份_{时间戳}.json"
+        
+        try:
+            目录 = os.path.dirname(导出路径)
+            if 目录:
+                os.makedirs(目录, exist_ok=True)
+            
+            with open(导出路径, 'w', encoding='utf-8') as f:
+                json.dump(self._配置, f, ensure_ascii=False, indent=2)
+            
+            日志.info(f"配置已导出: {导出路径}")
+            return 导出路径
+            
+        except Exception as e:
+            日志.error(f"导出配置失败: {e}")
+            return None
+    
+    def 导入配置(self, 导入路径: str, 覆盖现有: bool = False) -> bool:
+        """
+        从文件导入配置
+        
+        参数:
+            导入路径: 导入文件路径
+            覆盖现有: 是否覆盖现有配置
+            
+        返回:
+            是否导入成功
+        """
+        if not os.path.exists(导入路径):
+            日志.error(f"导入文件不存在: {导入路径}")
+            return False
+        
+        try:
+            with open(导入路径, 'r', encoding='utf-8') as f:
+                导入的配置 = json.load(f)
+            
+            # 验证导入的配置
+            导入的配置 = self._验证并迁移配置(导入的配置)
+            
+            if 覆盖现有:
+                # 完全替换
+                self._配置 = 导入的配置
+            else:
+                # 合并配置（不覆盖现有）
+                for 标识, 配置 in 导入的配置.get("配置列表", {}).items():
+                    if 标识 not in self._配置["配置列表"]:
+                        self._配置["配置列表"][标识] = 配置
+            
+            if self._保存配置文件():
+                日志.info(f"配置已导入: {导入路径}")
+                return True
+            return False
+            
+        except Exception as e:
+            日志.error(f"导入配置失败: {e}")
+            return False
+    
+    def 清空所有配置(self) -> bool:
+        """
+        清空所有配置
+        
+        返回:
+            是否清空成功
+        """
+        self._配置 = self._创建空配置()
+        return self._保存配置文件()
+    
+    def 按游戏名查找配置(self, 游戏名: str) -> List[Dict]:
+        """
+        按游戏名（进程名或标题）查找配置
+        
+        参数:
+            游戏名: 游戏名称关键词
+            
+        返回:
+            匹配的配置列表
+            
+        需求: 4.3
+        """
+        游戏名小写 = 游戏名.lower()
+        匹配列表 = []
+        
+        for 标识, 配置 in self._配置.get("配置列表", {}).items():
+            # 在标识、进程名、标题、别名中搜索
+            搜索字段 = [
+                标识.lower(),
+                配置.get("进程名", "").lower(),
+                配置.get("标题", "").lower(),
+                配置.get("别名", "").lower()
+            ]
+            
+            if any(游戏名小写 in 字段 for 字段 in 搜索字段):
+                配置副本 = 配置.copy()
+                配置副本["标识"] = 标识
+                匹配列表.append(配置副本)
+        
+        return 匹配列表
+    
+    @property
+    def 配置路径(self) -> str:
+        """获取配置文件路径"""
+        return self._配置路径
+    
+    @property
+    def 配置版本(self) -> str:
+        """获取配置版本"""
+        return self._配置.get("版本", self._配置版本)
 
 
 class 自动窗口检测器:
-    """自动窗口检测的统一接口"""
+    """
+    自动窗口检测的统一接口
+    
+    功能:
+    - 自动检测游戏窗口
+    - 手动/点击选择窗口
+    - 窗口位置跟踪
+    - 自动更新截取区域
+    - 配置保存和加载
+    """
     
     def __init__(self, 配置路径: str = "配置/窗口配置.json"):
         self._查找器 = 窗口查找器()
@@ -491,6 +1312,99 @@ class 自动窗口检测器:
         self._配置管理器 = 窗口配置管理器(配置路径)
         self._跟踪器: Optional[窗口跟踪器] = None
         self._当前窗口: Optional[窗口信息] = None
+        self._截取区域: Optional[Tuple[int, int, int, int]] = None
+        self._区域更新回调: Optional[Callable[[Tuple[int, int, int, int]], None]] = None
+        self._大小变化通知回调: Optional[Callable[[窗口变化事件], None]] = None
+        self._窗口关闭通知回调: Optional[Callable[[窗口变化事件], None]] = None
+        self._锁 = threading.Lock()
+    
+    def 设置区域更新回调(self, 回调: Callable[[Tuple[int, int, int, int]], None]):
+        """
+        设置截取区域更新回调
+        
+        当窗口移动时，会自动调用此回调更新截取区域
+        
+        参数:
+            回调: 接收新区域 (x, y, width, height) 的回调函数
+        """
+        self._区域更新回调 = 回调
+    
+    def 设置大小变化通知回调(self, 回调: Callable[[窗口变化事件], None]):
+        """
+        设置窗口大小变化通知回调
+        
+        当窗口大小改变时，会调用此回调通知用户
+        
+        参数:
+            回调: 接收变化事件的回调函数
+        """
+        self._大小变化通知回调 = 回调
+    
+    def 设置窗口关闭通知回调(self, 回调: Callable[[窗口变化事件], None]):
+        """
+        设置窗口关闭通知回调
+        
+        参数:
+            回调: 接收关闭事件的回调函数
+        """
+        self._窗口关闭通知回调 = 回调
+    
+    def _处理位置变化(self, 事件: 窗口变化事件):
+        """处理窗口位置变化 - 自动更新截取区域"""
+        if 事件.窗口信息:
+            新区域 = 事件.窗口信息.获取区域()
+            with self._锁:
+                self._截取区域 = 新区域
+                self._当前窗口 = 事件.窗口信息
+            
+            日志.info(f"截取区域已自动更新: {新区域}")
+            
+            # 触发区域更新回调
+            if self._区域更新回调:
+                try:
+                    self._区域更新回调(新区域)
+                except Exception as e:
+                    日志.error(f"区域更新回调执行失败: {e}")
+    
+    def _处理大小变化(self, 事件: 窗口变化事件):
+        """处理窗口大小变化 - 更新区域并通知用户"""
+        if 事件.窗口信息:
+            新区域 = 事件.窗口信息.获取区域()
+            with self._锁:
+                self._截取区域 = 新区域
+                self._当前窗口 = 事件.窗口信息
+            
+            日志.info(f"窗口大小已变化: {事件.旧大小} -> {事件.新大小}")
+            日志.info(f"截取区域已更新: {新区域}")
+            
+            # 触发区域更新回调
+            if self._区域更新回调:
+                try:
+                    self._区域更新回调(新区域)
+                except Exception as e:
+                    日志.error(f"区域更新回调执行失败: {e}")
+            
+            # 触发大小变化通知回调
+            if self._大小变化通知回调:
+                try:
+                    self._大小变化通知回调(事件)
+                except Exception as e:
+                    日志.error(f"大小变化通知回调执行失败: {e}")
+    
+    def _处理窗口关闭(self, 事件: 窗口变化事件):
+        """处理窗口关闭事件"""
+        日志.warning("跟踪的窗口已关闭")
+        
+        with self._锁:
+            self._当前窗口 = None
+            self._跟踪器 = None
+        
+        # 触发窗口关闭通知回调
+        if self._窗口关闭通知回调:
+            try:
+                self._窗口关闭通知回调(事件)
+            except Exception as e:
+                日志.error(f"窗口关闭通知回调执行失败: {e}")
     
     def 自动检测(self, 进程名: str = None, 标题: str = None) -> Optional[窗口信息]:
         """
@@ -516,6 +1430,7 @@ class 自动窗口检测器:
             
             if 窗口列表:
                 self._当前窗口 = 窗口列表[0]
+                self._截取区域 = self._当前窗口.获取区域()
                 日志.info(f"从配置加载窗口: {self._当前窗口.标题}")
                 return self._当前窗口
         
@@ -524,12 +1439,14 @@ class 自动窗口检测器:
             窗口列表 = self._查找器.按进程名查找(进程名)
             if 窗口列表:
                 self._当前窗口 = 窗口列表[0]
+                self._截取区域 = self._当前窗口.获取区域()
                 return self._当前窗口
         
         if 标题:
             窗口列表 = self._查找器.按标题查找(标题)
             if 窗口列表:
                 self._当前窗口 = 窗口列表[0]
+                self._截取区域 = self._当前窗口.获取区域()
                 return self._当前窗口
         
         return None
@@ -540,6 +1457,8 @@ class 自动窗口检测器:
         
         if 句柄:
             self._当前窗口 = self._查找器.获取窗口信息(句柄)
+            if self._当前窗口:
+                self._截取区域 = self._当前窗口.获取区域()
             return self._当前窗口
         
         return None
@@ -550,18 +1469,37 @@ class 自动窗口检测器:
         
         if 句柄:
             self._当前窗口 = self._查找器.获取窗口信息(句柄)
+            if self._当前窗口:
+                self._截取区域 = self._当前窗口.获取区域()
             return self._当前窗口
         
         return None
     
-    def 启动跟踪(self, 回调: Callable[[窗口信息], None] = None):
-        """启动窗口位置跟踪"""
+    def 启动跟踪(self, 回调: Callable[[窗口信息], None] = None, 自动更新区域: bool = True):
+        """
+        启动窗口位置跟踪
+        
+        参数:
+            回调: 任何变化时的回调函数（兼容旧接口）
+            自动更新区域: 是否自动更新截取区域（默认 True）
+        """
         if self._当前窗口 is None:
             日志.warning("未选择窗口，无法启动跟踪")
             return
         
         self.停止跟踪()
-        self._跟踪器 = 窗口跟踪器(self._当前窗口.句柄, 回调)
+        
+        # 创建跟踪器，设置回调
+        位置回调 = self._处理位置变化 if 自动更新区域 else None
+        大小回调 = self._处理大小变化 if 自动更新区域 else None
+        
+        self._跟踪器 = 窗口跟踪器(
+            self._当前窗口.句柄,
+            位置变化回调=位置回调,
+            大小变化回调=大小回调,
+            窗口关闭回调=self._处理窗口关闭,
+            通用回调=回调
+        )
         self._跟踪器.启动()
     
     def 停止跟踪(self):
@@ -569,6 +1507,10 @@ class 自动窗口检测器:
         if self._跟踪器:
             self._跟踪器.停止()
             self._跟踪器 = None
+    
+    def 是否正在跟踪(self) -> bool:
+        """检查是否正在跟踪窗口"""
+        return self._跟踪器 is not None and self._跟踪器.是否运行中
     
     def 保存当前配置(self, 使用进程名: bool = True):
         """保存当前窗口配置"""
@@ -581,19 +1523,42 @@ class 自动窗口检测器:
         self._配置管理器.设置默认(标识)
     
     def 获取截取区域(self) -> Optional[Tuple[int, int, int, int]]:
-        """获取当前窗口的截取区域"""
-        if self._当前窗口:
+        """
+        获取当前窗口的截取区域
+        
+        如果启用了跟踪，会返回最新的位置
+        """
+        with self._锁:
             # 如果有跟踪器，获取最新位置
-            if self._跟踪器:
+            if self._跟踪器 and self._跟踪器.是否运行中:
                 位置 = self._跟踪器.获取当前位置()
                 if 位置:
+                    self._截取区域 = 位置
                     return 位置
-            return self._当前窗口.获取区域()
+            
+            # 返回缓存的区域
+            if self._截取区域:
+                return self._截取区域
+            
+            # 从当前窗口获取
+            if self._当前窗口:
+                return self._当前窗口.获取区域()
+        
         return None
     
     def 获取当前窗口(self) -> Optional[窗口信息]:
         """获取当前选中的窗口"""
         return self._当前窗口
+    
+    def 获取跟踪器(self) -> Optional[窗口跟踪器]:
+        """获取当前的跟踪器实例"""
+        return self._跟踪器
+    
+    def 获取变化历史(self, 数量: int = 10) -> List[窗口变化事件]:
+        """获取窗口变化历史"""
+        if self._跟踪器:
+            return self._跟踪器.获取变化历史(数量)
+        return []
 
 
 def 主程序():

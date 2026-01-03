@@ -307,7 +307,14 @@ class 类别分析器:
 
 
 class 权重计算器:
-    """计算类别权重"""
+    """
+    计算类别权重
+    
+    支持三种权重计算策略:
+    - 逆频率: w_i = N / (K * n_i)
+    - 平方根逆频率: w_i = sqrt(N / (K * n_i))
+    - 有效样本数: 基于 Class-Balanced Loss 论文
+    """
     
     def __init__(self, 类别统计: Dict[int, int], 策略: 权重策略 = 权重策略.逆频率):
         """
@@ -448,18 +455,53 @@ class 权重计算器:
             print(f"  {类别名:12s}: {权重值:.4f} {条形}")
 
 
-class 采样器:
-    """数据采样策略"""
+@dataclass
+class 采样配置:
+    """采样器配置"""
+    目标比率: float = 1.0  # 目标平衡比率 (1.0 表示完全平衡)
+    最大样本数: Optional[int] = None  # 每个类别的最大样本数
+    打乱数据: bool = True  # 是否打乱采样后的数据
+    随机种子: Optional[int] = None  # 随机种子，用于可重复性
+    k_neighbors: int = 5  # SMOTE 算法的近邻数
     
-    def __init__(self, 数据集: List[Tuple[Any, Any]], 类别统计: Dict[int, int] = None):
+    def to_dict(self) -> dict:
+        return {
+            '目标比率': self.目标比率,
+            '最大样本数': self.最大样本数,
+            '打乱数据': self.打乱数据,
+            '随机种子': self.随机种子,
+            'k_neighbors': self.k_neighbors
+        }
+
+
+class 采样器:
+    """
+    数据采样策略
+    
+    支持多种采样方法:
+    - 随机过采样: 复制少数类别样本
+    - 随机欠采样: 减少多数类别样本
+    - 增强过采样: 类似 SMOTE，通过插值生成新样本
+    - 知情欠采样: 保留多样化样本
+    """
+    
+    def __init__(self, 数据集: List[Tuple[Any, Any]], 类别统计: Dict[int, int] = None,
+                 配置: 采样配置 = None):
         """
         初始化采样器
         
         参数:
             数据集: [(图像, 标签), ...] 列表
             类别统计: {类别索引: 样本数} 字典，None 则自动统计
+            配置: 采样配置对象
         """
         self.数据集 = 数据集
+        self.配置 = 配置 or 采样配置()
+        
+        # 设置随机种子
+        if self.配置.随机种子 is not None:
+            np.random.seed(self.配置.随机种子)
+        
         self._按类别分组()
         
         if 类别统计:
@@ -487,19 +529,32 @@ class 采样器:
         if isinstance(标签, (list, np.ndarray)):
             return int(np.argmax(标签))
         return int(标签)
+    
+    def _打乱数据(self, 数据: List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]:
+        """打乱数据顺序"""
+        if self.配置.打乱数据:
+            索引 = np.random.permutation(len(数据))
+            return [数据[i] for i in 索引]
+        return 数据
+    
+    def _获取最终数据集大小(self) -> int:
+        """获取采样后的数据集大小"""
+        return sum(len(样本) for 样本 in self._类别数据.values())
 
-    def 随机过采样(self, 目标比率: float = 1.0) -> List[Tuple[Any, Any]]:
+    def 随机过采样(self, 目标比率: float = None) -> List[Tuple[Any, Any]]:
         """
         对少数类别进行随机过采样
         
         参数:
-            目标比率: 目标平衡比率 (1.0 表示完全平衡)
+            目标比率: 目标平衡比率 (1.0 表示完全平衡)，None 则使用配置值
             
         返回:
             平衡后的数据集
         """
         if not self._类别数据:
             return self.数据集.copy()
+        
+        目标比率 = 目标比率 if 目标比率 is not None else self.配置.目标比率
         
         最大数量 = max(len(样本) for 样本 in self._类别数据.values())
         目标数量 = int(最大数量 * 目标比率)
@@ -522,6 +577,7 @@ class 采样器:
                 for idx in 复制索引:
                     平衡数据.append(样本列表[idx])
         
+        平衡数据 = self._打乱数据(平衡数据)
         日志.info(f"过采样完成: {len(self.数据集)} -> {len(平衡数据)} 样本")
         return 平衡数据
     
@@ -530,13 +586,16 @@ class 采样器:
         对多数类别进行随机欠采样
         
         参数:
-            最大样本数: 每个类别的最大样本数，None 则使用最小类别数量
+            最大样本数: 每个类别的最大样本数，None 则使用配置值或最小类别数量
             
         返回:
             平衡后的数据集
         """
         if not self._类别数据:
             return self.数据集.copy()
+        
+        if 最大样本数 is None:
+            最大样本数 = self.配置.最大样本数
         
         if 最大样本数 is None:
             最大样本数 = min(len(样本) for 样本 in self._类别数据.values())
@@ -554,6 +613,7 @@ class 采样器:
                 for idx in 选择索引:
                     平衡数据.append(样本列表[idx])
         
+        平衡数据 = self._打乱数据(平衡数据)
         日志.info(f"欠采样完成: {len(self.数据集)} -> {len(平衡数据)} 样本")
         return 平衡数据
     
@@ -597,42 +657,292 @@ class 采样器:
             else:
                 平衡数据.extend(样本列表)
         
+        平衡数据 = self._打乱数据(平衡数据)
         日志.info(f"混合采样完成: {len(self.数据集)} -> {len(平衡数据)} 样本")
         return 平衡数据
+    
+    def 增强过采样(self, 目标比率: float = None) -> List[Tuple[Any, Any]]:
+        """
+        对少数类别进行增强过采样（类似 SMOTE）
+        
+        通过在特征空间中对少数类别样本进行插值来生成新样本。
+        对于图像数据，使用像素级插值。
+        
+        参数:
+            目标比率: 目标平衡比率 (1.0 表示完全平衡)，None 则使用配置值
+            
+        返回:
+            平衡后的数据集
+        """
+        if not self._类别数据:
+            return self.数据集.copy()
+        
+        目标比率 = 目标比率 if 目标比率 is not None else self.配置.目标比率
+        k_neighbors = self.配置.k_neighbors
+        
+        最大数量 = max(len(样本) for 样本 in self._类别数据.values())
+        目标数量 = int(最大数量 * 目标比率)
+        
+        平衡数据 = []
+        
+        for 类别, 样本列表 in self._类别数据.items():
+            当前数量 = len(样本列表)
+            
+            if 当前数量 >= 目标数量:
+                # 不需要过采样
+                平衡数据.extend(样本列表)
+            else:
+                # 添加原始样本
+                平衡数据.extend(样本列表)
+                
+                # 生成合成样本
+                需要添加 = 目标数量 - 当前数量
+                
+                # 提取特征（图像数据展平）
+                特征列表 = []
+                for 图像, _ in 样本列表:
+                    if isinstance(图像, np.ndarray):
+                        特征列表.append(图像.flatten().astype(np.float32))
+                    else:
+                        特征列表.append(np.array(图像).flatten().astype(np.float32))
+                
+                特征矩阵 = np.array(特征列表)
+                
+                # 生成合成样本
+                for _ in range(需要添加):
+                    # 随机选择一个样本
+                    idx = np.random.randint(当前数量)
+                    原始样本 = 样本列表[idx]
+                    原始特征 = 特征矩阵[idx]
+                    
+                    # 找到 k 个最近邻
+                    实际k = min(k_neighbors, 当前数量 - 1)
+                    if 实际k < 1:
+                        # 样本太少，直接复制
+                        平衡数据.append(原始样本)
+                        continue
+                    
+                    # 计算距离
+                    距离 = np.linalg.norm(特征矩阵 - 原始特征, axis=1)
+                    距离[idx] = np.inf  # 排除自身
+                    近邻索引 = np.argsort(距离)[:实际k]
+                    
+                    # 随机选择一个近邻
+                    近邻idx = np.random.choice(近邻索引)
+                    近邻特征 = 特征矩阵[近邻idx]
+                    
+                    # 在两个样本之间插值
+                    alpha = np.random.random()
+                    合成特征 = 原始特征 + alpha * (近邻特征 - 原始特征)
+                    
+                    # 恢复图像形状
+                    原始图像 = 原始样本[0]
+                    if isinstance(原始图像, np.ndarray):
+                        合成图像 = 合成特征.reshape(原始图像.shape).astype(原始图像.dtype)
+                    else:
+                        合成图像 = 合成特征.reshape(np.array(原始图像).shape)
+                    
+                    平衡数据.append((合成图像, 原始样本[1]))
+        
+        平衡数据 = self._打乱数据(平衡数据)
+        日志.info(f"增强过采样完成: {len(self.数据集)} -> {len(平衡数据)} 样本")
+        return 平衡数据
+    
+    def 知情欠采样(self, 最大样本数: int = None) -> List[Tuple[Any, Any]]:
+        """
+        对多数类别进行知情欠采样（保留多样化样本）
+        
+        使用聚类方法选择最具代表性的样本，而不是随机选择。
+        这样可以保留数据的多样性。
+        
+        参数:
+            最大样本数: 每个类别的最大样本数，None 则使用配置值或最小类别数量
+            
+        返回:
+            平衡后的数据集
+        """
+        if not self._类别数据:
+            return self.数据集.copy()
+        
+        if 最大样本数 is None:
+            最大样本数 = self.配置.最大样本数
+        
+        if 最大样本数 is None:
+            最大样本数 = min(len(样本) for 样本 in self._类别数据.values())
+        
+        平衡数据 = []
+        
+        for 类别, 样本列表 in self._类别数据.items():
+            当前数量 = len(样本列表)
+            
+            if 当前数量 <= 最大样本数:
+                平衡数据.extend(样本列表)
+            else:
+                # 提取特征
+                特征列表 = []
+                for 图像, _ in 样本列表:
+                    if isinstance(图像, np.ndarray):
+                        特征列表.append(图像.flatten().astype(np.float32))
+                    else:
+                        特征列表.append(np.array(图像).flatten().astype(np.float32))
+                
+                特征矩阵 = np.array(特征列表)
+                
+                # 使用 K-Means 聚类选择代表性样本
+                选择索引 = self._kmeans_选择(特征矩阵, 最大样本数)
+                
+                for idx in 选择索引:
+                    平衡数据.append(样本列表[idx])
+        
+        平衡数据 = self._打乱数据(平衡数据)
+        日志.info(f"知情欠采样完成: {len(self.数据集)} -> {len(平衡数据)} 样本")
+        return 平衡数据
+    
+    def _kmeans_选择(self, 特征矩阵: np.ndarray, k: int) -> List[int]:
+        """
+        使用简化的 K-Means++ 初始化选择 k 个代表性样本
+        
+        参数:
+            特征矩阵: 样本特征矩阵
+            k: 要选择的样本数
+            
+        返回:
+            选择的样本索引列表
+        """
+        n_samples = len(特征矩阵)
+        
+        if k >= n_samples:
+            return list(range(n_samples))
+        
+        # K-Means++ 初始化
+        选择索引 = []
+        
+        # 随机选择第一个中心
+        第一个 = np.random.randint(n_samples)
+        选择索引.append(第一个)
+        
+        # 选择剩余的中心
+        for _ in range(k - 1):
+            # 计算每个点到最近中心的距离
+            距离 = np.full(n_samples, np.inf)
+            for idx in 选择索引:
+                d = np.linalg.norm(特征矩阵 - 特征矩阵[idx], axis=1)
+                距离 = np.minimum(距离, d)
+            
+            # 已选择的点距离设为 0
+            for idx in 选择索引:
+                距离[idx] = 0
+            
+            # 按距离的平方作为概率选择下一个中心
+            概率 = 距离 ** 2
+            概率总和 = 概率.sum()
+            
+            if 概率总和 > 0:
+                概率 = 概率 / 概率总和
+                下一个 = np.random.choice(n_samples, p=概率)
+            else:
+                # 所有点都已选择或距离为 0
+                剩余 = [i for i in range(n_samples) if i not in 选择索引]
+                if 剩余:
+                    下一个 = np.random.choice(剩余)
+                else:
+                    break
+            
+            选择索引.append(下一个)
+        
+        return 选择索引
+    
+    def 获取采样统计(self) -> Dict[str, Any]:
+        """
+        获取采样统计信息
+        
+        返回:
+            包含采样统计的字典
+        """
+        统计 = {
+            '原始样本数': len(self.数据集),
+            '类别数': len(self._类别数据),
+            '各类别样本数': {类别: len(样本) for 类别, 样本 in self._类别数据.items()},
+            '配置': self.配置.to_dict()
+        }
+        return 统计
+    
+    def 报告最终数据集大小(self, 平衡数据: List[Tuple[Any, Any]]) -> Dict[str, int]:
+        """
+        报告平衡后的数据集大小
+        
+        参数:
+            平衡数据: 平衡后的数据集
+            
+        返回:
+            各类别样本数统计
+        """
+        统计 = {}
+        for 样本 in 平衡数据:
+            _, 标签 = 样本
+            类别 = self._获取标签(标签)
+            统计[类别] = 统计.get(类别, 0) + 1
+        
+        日志.info(f"最终数据集大小: {len(平衡数据)} 样本")
+        for 类别, 数量 in sorted(统计.items()):
+            类别名 = 动作映射.get(类别, f"动作{类别}")
+            日志.info(f"  {类别名}: {数量}")
+        
+        return 统计
 
 
 class 加权交叉熵损失:
-    """带类别权重的交叉熵损失函数"""
+    """
+    带类别权重的交叉熵损失函数
     
-    def __init__(self, 类别权重: Dict[int, float], 类别数: int = None):
+    支持两种使用方式:
+    1. NumPy 模式: 直接调用计算损失值（用于评估）
+    2. TensorFlow 模式: 返回 TensorFlow 损失函数（用于训练）
+    
+    使用示例:
+        # NumPy 模式
+        损失函数 = 加权交叉熵损失({0: 0.5, 1: 2.0, 2: 1.5})
+        损失值 = 损失函数(预测, 标签)
+        
+        # TensorFlow 模式 (用于 TFLearn)
+        tf_损失 = 损失函数.获取tensorflow损失函数()
+    """
+    
+    def __init__(self, 类别权重: Dict[int, float], 类别数: int = None, 设备: str = "cpu"):
         """
         初始化加权损失函数
         
         参数:
             类别权重: {类别索引: 权重} 字典
             类别数: 总类别数，None 则从权重推断
+            设备: 计算设备 ("cpu" 或 "cuda"/"gpu")，用于 TensorFlow 设备放置
         """
         self.类别权重 = 类别权重
-        self.类别数 = 类别数 or max(类别权重.keys()) + 1
+        self.类别数 = 类别数 or (max(类别权重.keys()) + 1 if 类别权重 else 1)
+        self.设备 = 设备
         
         # 转换为权重数组
-        self._权重数组 = np.ones(self.类别数)
+        self._权重数组 = np.ones(self.类别数, dtype=np.float32)
         for 类别, 权重 in 类别权重.items():
             if 0 <= 类别 < self.类别数:
-                self._权重数组[类别] = 权重
+                self._权重数组[类别] = float(权重)
+        
+        # TensorFlow 相关变量（延迟初始化）
+        self._tf_权重张量 = None
+        self._tf_损失函数 = None
     
     def __call__(self, 预测: np.ndarray, 标签: np.ndarray) -> float:
         """
-        计算加权交叉熵损失
+        计算加权交叉熵损失 (NumPy 模式)
         
         参数:
-            预测: 模型预测输出 (softmax 后的概率)
+            预测: 模型预测输出 (softmax 后的概率)，形状 [batch_size, num_classes]
             标签: 真实标签 (one-hot 或类别索引)
             
         返回:
-            加权损失值
+            加权损失值 (标量)
         """
-        # 确保预测值在有效范围内
+        # 确保预测值在有效范围内，避免 log(0)
         预测 = np.clip(预测, 1e-7, 1 - 1e-7)
         
         # 处理标签格式
@@ -644,22 +954,183 @@ class 加权交叉熵损失:
             损失 = 0.0
             for i in range(批量大小):
                 类别 = int(标签[i])
-                权重 = self._权重数组[类别]
-                损失 -= 权重 * np.log(预测[i, 类别])
-            return 损失 / 批量大小
+                if 0 <= 类别 < self.类别数:
+                    权重 = self._权重数组[类别]
+                    损失 -= 权重 * np.log(预测[i, 类别])
+            return 损失 / 批量大小 if 批量大小 > 0 else 0.0
         else:
             # one-hot 格式
             批量大小 = 标签.shape[0]
             损失 = 0.0
             for i in range(批量大小):
                 类别 = int(np.argmax(标签[i]))
-                权重 = self._权重数组[类别]
-                损失 -= 权重 * np.log(预测[i, 类别])
-            return 损失 / 批量大小
+                if 0 <= 类别 < self.类别数:
+                    权重 = self._权重数组[类别]
+                    损失 -= 权重 * np.log(预测[i, 类别])
+            return 损失 / 批量大小 if 批量大小 > 0 else 0.0
+    
+    def 计算批次损失(self, 预测: np.ndarray, 标签: np.ndarray) -> np.ndarray:
+        """
+        计算每个样本的加权损失 (NumPy 模式)
+        
+        参数:
+            预测: 模型预测输出，形状 [batch_size, num_classes]
+            标签: 真实标签 (one-hot 或类别索引)
+            
+        返回:
+            每个样本的损失值，形状 [batch_size]
+        """
+        预测 = np.clip(预测, 1e-7, 1 - 1e-7)
+        批量大小 = 预测.shape[0]
+        损失数组 = np.zeros(批量大小)
+        
+        # 处理标签格式
+        if 标签.ndim == 1 or (标签.ndim == 2 and 标签.shape[1] == 1):
+            if 标签.ndim == 2:
+                标签 = 标签.flatten()
+            for i in range(批量大小):
+                类别 = int(标签[i])
+                if 0 <= 类别 < self.类别数:
+                    权重 = self._权重数组[类别]
+                    损失数组[i] = -权重 * np.log(预测[i, 类别])
+        else:
+            for i in range(批量大小):
+                类别 = int(np.argmax(标签[i]))
+                if 0 <= 类别 < self.类别数:
+                    权重 = self._权重数组[类别]
+                    损失数组[i] = -权重 * np.log(预测[i, 类别])
+        
+        return 损失数组
     
     def 获取权重数组(self) -> np.ndarray:
-        """获取权重数组（用于框架集成）"""
+        """
+        获取权重数组（用于框架集成）
+        
+        返回:
+            权重数组，形状 [num_classes]
+        """
         return self._权重数组.copy()
+    
+    def 获取tensorflow损失函数(self):
+        """
+        获取 TensorFlow 兼容的损失函数
+        
+        返回:
+            可用于 TFLearn regression 层的损失函数
+            
+        使用示例:
+            损失函数 = 加权交叉熵损失({0: 0.5, 1: 2.0})
+            tf_loss = 损失函数.获取tensorflow损失函数()
+            
+            # 在 TFLearn 中使用
+            network = regression(network, optimizer='adam',
+                               loss=tf_loss,
+                               learning_rate=0.001)
+        """
+        try:
+            import tensorflow as tf
+            
+            # 创建权重张量
+            权重张量 = tf.constant(self._权重数组, dtype=tf.float32, name='class_weights')
+            
+            def 加权损失(y_pred, y_true):
+                """
+                TensorFlow 加权交叉熵损失函数
+                
+                参数:
+                    y_pred: 预测值张量，形状 [batch_size, num_classes]
+                    y_true: 真实标签张量，形状 [batch_size, num_classes] (one-hot)
+                    
+                返回:
+                    损失张量 (标量)
+                """
+                # 裁剪预测值，避免 log(0)
+                y_pred = tf.clip_by_value(y_pred, 1e-7, 1 - 1e-7)
+                
+                # 获取每个样本的真实类别索引
+                类别索引 = tf.argmax(y_true, axis=1)
+                
+                # 获取每个样本对应的权重
+                样本权重 = tf.gather(权重张量, 类别索引)
+                
+                # 计算交叉熵损失
+                交叉熵 = -tf.reduce_sum(y_true * tf.math.log(y_pred), axis=1)
+                
+                # 应用权重
+                加权损失值 = 样本权重 * 交叉熵
+                
+                # 返回平均损失
+                return tf.reduce_mean(加权损失值)
+            
+            self._tf_损失函数 = 加权损失
+            return 加权损失
+            
+        except ImportError:
+            日志.error("TensorFlow 未安装，无法创建 TensorFlow 损失函数")
+            raise ImportError("需要安装 TensorFlow 才能使用此功能")
+    
+    def 获取tflearn损失函数(self):
+        """
+        获取 TFLearn 兼容的损失函数（别名）
+        
+        返回:
+            可用于 TFLearn regression 层的损失函数
+        """
+        return self.获取tensorflow损失函数()
+    
+    def 打印权重信息(self):
+        """打印权重信息"""
+        print(f"\n⚖️  加权交叉熵损失函数")
+        print(f"   类别数: {self.类别数}")
+        print(f"   设备: {self.设备}")
+        print("-" * 40)
+        for i, 权重 in enumerate(self._权重数组):
+            类别名 = 动作映射.get(i, f"动作{i}")
+            条形 = "█" * int(权重 * 5)
+            print(f"   {类别名:12s}: {权重:.4f} {条形}")
+    
+    @classmethod
+    def 从配置创建(cls, 配置路径: str, 类别数: int = None, 设备: str = "cpu"):
+        """
+        从配置文件创建加权损失函数
+        
+        参数:
+            配置路径: 权重配置文件路径
+            类别数: 总类别数
+            设备: 计算设备
+            
+        返回:
+            加权交叉熵损失实例
+        """
+        权重 = 权重计算器.加载权重(配置路径)
+        return cls(权重, 类别数, 设备)
+    
+    @classmethod
+    def 从数据创建(cls, 数据路径: str = None, 策略: 权重策略 = 权重策略.逆频率, 
+                  类别数: int = None, 设备: str = "cpu"):
+        """
+        从训练数据自动创建加权损失函数
+        
+        参数:
+            数据路径: 训练数据目录路径
+            策略: 权重计算策略
+            类别数: 总类别数
+            设备: 计算设备
+            
+        返回:
+            加权交叉熵损失实例
+        """
+        分析器 = 类别分析器(数据路径)
+        统计 = 分析器.统计分布()
+        
+        if not 统计:
+            日志.warning("未找到训练数据，使用默认权重 (1.0)")
+            return cls({}, 类别数 or 总动作数, 设备)
+        
+        计算器 = 权重计算器(统计, 策略)
+        归一化权重 = 计算器.归一化权重(计算器.计算权重())
+        
+        return cls(归一化权重, 类别数 or len(归一化权重), 设备)
 
 
 # ============== 兼容旧版本的函数 ==============
@@ -757,6 +1228,11 @@ def 主程序():
         
         保存路径 = input("\n输入保存路径 (留空则显示): ").strip()
         分析器.可视化(保存路径 if 保存路径 else None)
+
+
+# ============== 类别别名（向后兼容） ==============
+# 为了兼容旧代码中使用的 "类别权重计算器" 名称
+类别权重计算器 = 权重计算器
 
 
 if __name__ == "__main__":
