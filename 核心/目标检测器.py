@@ -1,6 +1,8 @@
 """
 YOLO目标检测器模块
 实现基于YOLO的游戏实体检测功能
+
+集成智能缓存和异步检测功能，提升检测性能。
 """
 
 import logging
@@ -11,6 +13,20 @@ import numpy as np
 
 from 核心.数据类型 import 实体类型, 方向, 检测结果
 from 配置.增强设置 import YOLO配置, 实体类型映射, 实体类型枚举
+
+# 尝试导入智能缓存模块
+try:
+    from 核心.智能缓存 import 智能检测缓存
+    智能缓存可用 = True
+except ImportError:
+    智能缓存可用 = False
+
+# 尝试导入异步检测模块
+try:
+    from 核心.异步检测 import 异步检测器
+    异步检测可用 = True
+except ImportError:
+    异步检测可用 = False
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -28,7 +44,9 @@ class YOLO检测器:
         模型路径: Optional[str] = None, 
         置信度阈值: Optional[float] = None,
         NMS阈值: Optional[float] = None,
-        输入尺寸: Optional[Tuple[int, int]] = None
+        输入尺寸: Optional[Tuple[int, int]] = None,
+        启用缓存: bool = True,
+        启用异步: bool = False
     ):
         """
         初始化YOLO检测器
@@ -38,6 +56,8 @@ class YOLO检测器:
             置信度阈值: 检测置信度阈值，低于此值的结果将被过滤
             NMS阈值: 非极大值抑制阈值
             输入尺寸: 模型输入图像尺寸
+            启用缓存: 是否启用智能缓存
+            启用异步: 是否启用异步检测
         """
         self.模型路径 = 模型路径 or YOLO配置["模型路径"]
         self.置信度阈值 = 置信度阈值 if 置信度阈值 is not None else YOLO配置["置信度阈值"]
@@ -48,8 +68,22 @@ class YOLO检测器:
         self._已加载 = False
         self._上次检测结果: List[检测结果] = []
         
+        # 智能缓存集成
+        self._智能缓存: Optional['智能检测缓存'] = None
+        self._启用缓存 = 启用缓存 and 智能缓存可用
+        if self._启用缓存:
+            self._初始化缓存()
+        
+        # 异步检测集成
+        self._异步检测器: Optional['异步检测器'] = None
+        self._启用异步 = 启用异步 and 异步检测可用
+        if self._启用异步:
+            self._初始化异步检测()
+        
         # 尝试加载模型
         self._加载模型()
+        
+        logger.info(f"YOLO检测器初始化完成，缓存: {self._启用缓存}, 异步: {self._启用异步}")
     
     def _加载模型(self) -> bool:
         """
@@ -83,12 +117,13 @@ class YOLO检测器:
         """
         return self._已加载
     
-    def 检测(self, 图像: np.ndarray) -> List[检测结果]:
+    def 检测(self, 图像: np.ndarray, 使用缓存: bool = True) -> List[检测结果]:
         """
         执行目标检测
         
         Args:
             图像: 输入图像 (BGR格式的numpy数组)
+            使用缓存: 是否使用缓存（如果启用）
             
         Returns:
             检测结果列表，按置信度降序排列
@@ -102,6 +137,13 @@ class YOLO检测器:
         if 图像 is None or 图像.size == 0:
             logger.warning("输入图像无效，返回空检测结果")
             return []
+        
+        # 尝试使用缓存
+        if self._启用缓存 and self._智能缓存 and 使用缓存:
+            缓存结果 = self._智能缓存.获取(图像)
+            if 缓存结果 is not None:
+                logger.debug("使用缓存的检测结果")
+                return 缓存结果
         
         try:
             # 获取屏幕尺寸
@@ -119,6 +161,10 @@ class YOLO检测器:
             
             # 缓存结果
             self._上次检测结果 = 检测列表
+            
+            # 更新智能缓存
+            if self._启用缓存 and self._智能缓存:
+                self._智能缓存.存储(图像, 检测列表)
             
             return 检测列表
             
@@ -368,3 +414,178 @@ class YOLO检测器:
             return None
         
         return min(候选列表, key=lambda x: x.距离)
+    
+    # ==================== 智能缓存集成方法 ====================
+    
+    def _初始化缓存(self) -> None:
+        """初始化智能缓存"""
+        if not 智能缓存可用:
+            logger.warning("智能缓存模块不可用")
+            return
+        
+        try:
+            self._智能缓存 = 智能检测缓存()
+            logger.info("智能缓存初始化成功")
+        except Exception as e:
+            logger.error(f"智能缓存初始化失败: {e}")
+            self._智能缓存 = None
+            self._启用缓存 = False
+    
+    def 启用缓存(self, 启用: bool = True) -> None:
+        """启用或禁用智能缓存
+        
+        Args:
+            启用: 是否启用
+        """
+        if not 智能缓存可用:
+            logger.warning("智能缓存模块不可用")
+            return
+        
+        self._启用缓存 = 启用
+        
+        if 启用 and self._智能缓存 is None:
+            self._初始化缓存()
+        
+        logger.info(f"智能缓存已{'启用' if 启用 else '禁用'}")
+    
+    def 清空缓存(self) -> None:
+        """清空检测缓存"""
+        if self._智能缓存:
+            self._智能缓存.清空()
+            logger.debug("已清空检测缓存")
+    
+    def 获取缓存统计(self) -> dict:
+        """获取缓存统计信息"""
+        if not self._智能缓存:
+            return {"可用": False, "启用": False}
+        
+        try:
+            统计 = self._智能缓存.获取统计()
+            统计["可用"] = True
+            统计["启用"] = self._启用缓存
+            return 统计
+        except Exception as e:
+            logger.warning(f"获取缓存统计失败: {e}")
+            return {"可用": True, "启用": self._启用缓存, "错误": str(e)}
+    
+    # ==================== 异步检测集成方法 ====================
+    
+    def _初始化异步检测(self) -> None:
+        """初始化异步检测器"""
+        if not 异步检测可用:
+            logger.warning("异步检测模块不可用")
+            return
+        
+        try:
+            self._异步检测器 = 异步检测器(self)
+            logger.info("异步检测器初始化成功")
+        except Exception as e:
+            logger.error(f"异步检测器初始化失败: {e}")
+            self._异步检测器 = None
+            self._启用异步 = False
+    
+    def 启用异步检测(self, 启用: bool = True) -> None:
+        """启用或禁用异步检测
+        
+        Args:
+            启用: 是否启用
+        """
+        if not 异步检测可用:
+            logger.warning("异步检测模块不可用")
+            return
+        
+        self._启用异步 = 启用
+        
+        if 启用 and self._异步检测器 is None:
+            self._初始化异步检测()
+        
+        logger.info(f"异步检测已{'启用' if 启用 else '禁用'}")
+    
+    def 异步检测(self, 图像: np.ndarray) -> None:
+        """提交异步检测任务
+        
+        Args:
+            图像: 输入图像
+        """
+        if not self._异步检测器 or not self._启用异步:
+            logger.warning("异步检测未启用")
+            return
+        
+        try:
+            self._异步检测器.提交(图像)
+        except Exception as e:
+            logger.error(f"提交异步检测任务失败: {e}")
+    
+    def 获取异步结果(self, 超时: float = 0.0) -> Optional[List[检测结果]]:
+        """获取异步检测结果
+        
+        Args:
+            超时: 等待超时时间（秒），0表示不等待
+            
+        Returns:
+            检测结果列表，如果没有结果返回None
+        """
+        if not self._异步检测器 or not self._启用异步:
+            return None
+        
+        try:
+            return self._异步检测器.获取结果(超时)
+        except Exception as e:
+            logger.warning(f"获取异步检测结果失败: {e}")
+            return None
+    
+    def 停止异步检测(self) -> None:
+        """停止异步检测器"""
+        if self._异步检测器:
+            try:
+                self._异步检测器.停止()
+                logger.info("异步检测器已停止")
+            except Exception as e:
+                logger.error(f"停止异步检测器失败: {e}")
+    
+    def 获取异步检测状态(self) -> dict:
+        """获取异步检测状态"""
+        if not self._异步检测器:
+            return {"可用": False, "启用": False}
+        
+        try:
+            状态 = self._异步检测器.获取状态() if hasattr(self._异步检测器, '获取状态') else {}
+            状态["可用"] = True
+            状态["启用"] = self._启用异步
+            return 状态
+        except Exception as e:
+            logger.warning(f"获取异步检测状态失败: {e}")
+            return {"可用": True, "启用": self._启用异步, "错误": str(e)}
+    
+    # ==================== 综合状态方法 ====================
+    
+    def 获取检测器完整状态(self) -> dict:
+        """获取检测器完整状态信息
+        
+        Returns:
+            包含所有子模块状态的字典
+        """
+        return {
+            "模型": {
+                "已加载": self._已加载,
+                "模型路径": self.模型路径,
+                "置信度阈值": self.置信度阈值,
+                "NMS阈值": self.NMS阈值
+            },
+            "缓存": self.获取缓存统计(),
+            "异步检测": self.获取异步检测状态()
+        }
+    
+    def 释放资源(self) -> None:
+        """释放检测器资源"""
+        # 停止异步检测
+        self.停止异步检测()
+        
+        # 清空缓存
+        self.清空缓存()
+        
+        # 清空模型
+        self._模型 = None
+        self._已加载 = False
+        
+        logger.info("检测器资源已释放")

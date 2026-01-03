@@ -3,6 +3,7 @@
 结合规则引擎和模型预测，根据游戏状态做出智能决策
 
 集成自动调参模块，支持实时参数优化。
+集成ONNX推理、模型管理、状态检测等新功能模块。
 需求: 10.3 - 与决策引擎集成，实时应用参数调整
 """
 
@@ -10,6 +11,8 @@ import time
 import logging
 from collections import deque
 from typing import List, Dict, Optional, Tuple, Callable
+
+import numpy as np
 
 from 核心.数据类型 import (
     游戏状态, 决策策略, 检测结果, 决策上下文, 决策结果, 决策规则, 决策日志
@@ -25,6 +28,27 @@ try:
     自动调参可用 = True
 except ImportError:
     自动调参可用 = False
+
+# 尝试导入ONNX推理模块
+try:
+    from 核心.ONNX推理 import 统一推理引擎
+    ONNX推理可用 = True
+except ImportError:
+    ONNX推理可用 = False
+
+# 尝试导入模型管理模块
+try:
+    from 核心.模型管理 import 模型管理器
+    模型管理可用 = True
+except ImportError:
+    模型管理可用 = False
+
+# 尝试导入状态检测模块
+try:
+    from 核心.状态检测 import 状态检测器
+    状态检测可用 = True
+except ImportError:
+    状态检测可用 = False
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -42,13 +66,16 @@ class 决策引擎:
     - 冲突解决: 处理规则和模型预测的冲突
     """
     
-    def __init__(self, 策略: 决策策略 = None, 启用自动调参: bool = False):
+    def __init__(self, 策略: 决策策略 = None, 启用自动调参: bool = False,
+                 启用ONNX推理: bool = True, 启用状态检测: bool = True):
         """
         初始化决策引擎
         
         Args:
             策略: 决策策略，默认从配置读取
             启用自动调参: 是否启用自动调参功能
+            启用ONNX推理: 是否启用ONNX推理加速
+            启用状态检测: 是否启用血量/蓝量状态检测
         """
         # 决策策略
         if 策略 is None:
@@ -89,7 +116,25 @@ class 决策引擎:
         if self._启用自动调参:
             self._初始化自动调参()
         
-        logger.info(f"决策引擎初始化完成，策略: {self.策略.value}, 自动调参: {self._启用自动调参}")
+        # ONNX推理引擎集成
+        self._推理引擎: Optional['统一推理引擎'] = None
+        self._启用ONNX推理 = 启用ONNX推理 and ONNX推理可用
+        if self._启用ONNX推理:
+            self._初始化推理引擎()
+        
+        # 模型管理器集成
+        self._模型管理器: Optional['模型管理器'] = None
+        if 模型管理可用:
+            self._初始化模型管理器()
+        
+        # 状态检测器集成
+        self._状态检测器: Optional['状态检测器'] = None
+        self._启用状态检测 = 启用状态检测 and 状态检测可用
+        if self._启用状态检测:
+            self._初始化状态检测器()
+        
+        logger.info(f"决策引擎初始化完成，策略: {self.策略.value}, 自动调参: {self._启用自动调参}, "
+                   f"ONNX推理: {self._启用ONNX推理}, 状态检测: {self._启用状态检测}")
     
     def 添加规则(self, 规则: 决策规则) -> None:
         """
@@ -758,3 +803,196 @@ class 决策引擎:
             self.规则权重 = 决策引擎配置.get("规则权重", 0.6)
             self.模型权重 = 决策引擎配置.get("模型权重", 0.4)
             logger.info("已重置所有参数为默认值")
+    
+    # ==================== ONNX推理集成方法 ====================
+    
+    def _初始化推理引擎(self) -> None:
+        """初始化ONNX推理引擎"""
+        if not ONNX推理可用:
+            logger.warning("ONNX推理模块不可用")
+            return
+        
+        try:
+            self._推理引擎 = 统一推理引擎()
+            logger.info("ONNX推理引擎初始化成功")
+        except Exception as e:
+            logger.error(f"ONNX推理引擎初始化失败: {e}")
+            self._推理引擎 = None
+            self._启用ONNX推理 = False
+    
+    def 使用ONNX推理(self, 图像: np.ndarray) -> Optional[List[float]]:
+        """使用ONNX引擎进行推理
+        
+        Args:
+            图像: 输入图像
+            
+        Returns:
+            推理结果（动作概率列表），失败返回None
+        """
+        if not self._推理引擎 or not self._启用ONNX推理:
+            return None
+        
+        try:
+            结果 = self._推理引擎.推理(图像)
+            return 结果.tolist() if isinstance(结果, np.ndarray) else 结果
+        except Exception as e:
+            logger.warning(f"ONNX推理失败: {e}")
+            return None
+    
+    def 获取推理引擎状态(self) -> Dict:
+        """获取推理引擎状态"""
+        if not self._推理引擎:
+            return {"可用": False, "启用": False}
+        
+        return {
+            "可用": True,
+            "启用": self._启用ONNX推理,
+            "后端": self._推理引擎.获取当前后端() if hasattr(self._推理引擎, '获取当前后端') else "unknown"
+        }
+    
+    # ==================== 模型管理集成方法 ====================
+    
+    def _初始化模型管理器(self) -> None:
+        """初始化模型管理器"""
+        if not 模型管理可用:
+            logger.warning("模型管理模块不可用")
+            return
+        
+        try:
+            self._模型管理器 = 模型管理器()
+            logger.info("模型管理器初始化成功")
+        except Exception as e:
+            logger.error(f"模型管理器初始化失败: {e}")
+            self._模型管理器 = None
+    
+    def 切换模型(self, 模型名称: str) -> bool:
+        """热切换模型
+        
+        Args:
+            模型名称: 要切换到的模型名称
+            
+        Returns:
+            是否切换成功
+        """
+        if not self._模型管理器:
+            logger.warning("模型管理器不可用")
+            return False
+        
+        try:
+            return self._模型管理器.切换模型(模型名称)
+        except Exception as e:
+            logger.error(f"模型切换失败: {e}")
+            return False
+    
+    def 获取可用模型列表(self) -> List[str]:
+        """获取可用模型列表"""
+        if not self._模型管理器:
+            return []
+        
+        try:
+            return self._模型管理器.获取模型列表()
+        except Exception as e:
+            logger.error(f"获取模型列表失败: {e}")
+            return []
+    
+    def 获取当前模型(self) -> Optional[str]:
+        """获取当前使用的模型名称"""
+        if not self._模型管理器:
+            return None
+        
+        try:
+            return self._模型管理器.获取当前模型()
+        except Exception as e:
+            logger.error(f"获取当前模型失败: {e}")
+            return None
+    
+    # ==================== 状态检测集成方法 ====================
+    
+    def _初始化状态检测器(self) -> None:
+        """初始化状态检测器"""
+        if not 状态检测可用:
+            logger.warning("状态检测模块不可用")
+            return
+        
+        try:
+            self._状态检测器 = 状态检测器()
+            logger.info("状态检测器初始化成功")
+        except Exception as e:
+            logger.error(f"状态检测器初始化失败: {e}")
+            self._状态检测器 = None
+            self._启用状态检测 = False
+    
+    def 检测角色状态(self, 图像: np.ndarray) -> Dict:
+        """检测角色血量/蓝量状态
+        
+        Args:
+            图像: 游戏画面图像
+            
+        Returns:
+            状态字典，包含血量百分比、蓝量百分比等
+        """
+        if not self._状态检测器 or not self._启用状态检测:
+            return {"血量百分比": 1.0, "蓝量百分比": 1.0, "检测成功": False}
+        
+        try:
+            return self._状态检测器.检测(图像)
+        except Exception as e:
+            logger.warning(f"状态检测失败: {e}")
+            return {"血量百分比": 1.0, "蓝量百分比": 1.0, "检测成功": False}
+    
+    def 更新决策上下文状态(self, 上下文: 决策上下文, 图像: np.ndarray) -> 决策上下文:
+        """使用状态检测更新决策上下文
+        
+        Args:
+            上下文: 原始决策上下文
+            图像: 游戏画面图像
+            
+        Returns:
+            更新后的决策上下文
+        """
+        if self._启用状态检测 and self._状态检测器:
+            状态 = self.检测角色状态(图像)
+            if 状态.get("检测成功", False):
+                上下文.血量百分比 = 状态.get("血量百分比", 上下文.血量百分比)
+                # 如果上下文支持蓝量，也更新蓝量
+                if hasattr(上下文, '蓝量百分比'):
+                    上下文.蓝量百分比 = 状态.get("蓝量百分比", 1.0)
+        
+        return 上下文
+    
+    def 获取状态检测器状态(self) -> Dict:
+        """获取状态检测器状态"""
+        if not self._状态检测器:
+            return {"可用": False, "启用": False}
+        
+        return {
+            "可用": True,
+            "启用": self._启用状态检测
+        }
+    
+    # ==================== 综合状态方法 ====================
+    
+    def 获取引擎完整状态(self) -> Dict:
+        """获取决策引擎完整状态信息
+        
+        Returns:
+            包含所有子模块状态的字典
+        """
+        return {
+            "决策引擎": {
+                "策略": self.策略.value,
+                "规则数量": len(self.规则列表),
+                "规则权重": self.规则权重,
+                "模型权重": self.模型权重
+            },
+            "自动调参": self.获取自动调参状态(),
+            "ONNX推理": self.获取推理引擎状态(),
+            "模型管理": {
+                "可用": self._模型管理器 is not None,
+                "当前模型": self.获取当前模型(),
+                "可用模型数": len(self.获取可用模型列表())
+            },
+            "状态检测": self.获取状态检测器状态(),
+            "统计信息": self.获取统计信息()
+        }
+
