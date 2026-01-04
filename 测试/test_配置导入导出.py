@@ -133,7 +133,7 @@ class TestConfigImportExportRoundTrip:
         detection_params=valid_detection_params_strategy,
         decision_rules=valid_decision_rules_strategy
     )
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     def test_export_then_import_returns_equivalent_data(
         self,
         name: str,

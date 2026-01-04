@@ -3,20 +3,29 @@ YOLO目标检测器模块
 实现基于YOLO的游戏实体检测功能
 
 集成智能缓存和异步检测功能，提升检测性能。
+
+需求: 2.1, 2.2 - 智能缓存集成
 """
 
 import logging
 import math
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Dict, Any
 
 import numpy as np
 
 from 核心.数据类型 import 实体类型, 方向, 检测结果
 from 配置.增强设置 import YOLO配置, 实体类型映射, 实体类型枚举
 
+# 尝试导入缓存配置
+try:
+    from 配置.增强设置 import 缓存配置 as 增强设置缓存配置
+except ImportError:
+    增强设置缓存配置 = None
+
 # 尝试导入智能缓存模块
 try:
-    from 核心.智能缓存 import 智能检测缓存
+    from 核心.智能缓存 import 智能检测缓存, 智能缓存
+    from 核心.缓存策略 import 缓存策略, 优先区域, 获取默认缓存策略
     智能缓存可用 = True
 except ImportError:
     智能缓存可用 = False
@@ -32,11 +41,39 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+# ==================== 缓存配置 ====================
+# 默认缓存配置，可通过配置文件覆盖
+# 需求: 2.1, 2.2, 2.3, 3.4
+缓存配置 = {
+    "启用": True,  # 是否启用智能缓存
+    "全局相似度阈值": 0.95,  # 使用缓存的相似度阈值
+    "过期时间": 0.5,  # 缓存过期时间（秒）
+    "启用时间过期": True,  # 是否启用基于时间的过期
+    "比较方法": "histogram",  # 帧比较方法: "histogram", "ssim", "mse", "hash"
+    "预热帧数": 1,  # 预热帧数
+    "优先区域": [
+        # 示例优先区域配置（屏幕中心区域，更严格的阈值）
+        # {
+        #     "名称": "屏幕中心",
+        #     "区域": [0.3, 0.3, 0.4, 0.4],  # 相对坐标 (x, y, w, h)
+        #     "阈值": 0.9
+        # }
+    ]
+}
+
+# 如果增强设置中有缓存配置，则使用增强设置的配置
+if 增强设置缓存配置 is not None:
+    缓存配置.update(增强设置缓存配置)
+
+
 class YOLO检测器:
     """
     YOLO目标检测器
     
     用于检测游戏画面中的实体（怪物、NPC、玩家、物品、技能特效等）
+    
+    支持智能缓存功能，根据画面变化程度决定是否重新执行检测
+    需求: 2.1, 2.2
     """
     
     def __init__(
@@ -46,7 +83,8 @@ class YOLO检测器:
         NMS阈值: Optional[float] = None,
         输入尺寸: Optional[Tuple[int, int]] = None,
         启用缓存: bool = True,
-        启用异步: bool = False
+        启用异步: bool = False,
+        缓存配置项: Optional[Dict[str, Any]] = None
     ):
         """
         初始化YOLO检测器
@@ -58,6 +96,9 @@ class YOLO检测器:
             输入尺寸: 模型输入图像尺寸
             启用缓存: 是否启用智能缓存
             启用异步: 是否启用异步检测
+            缓存配置项: 缓存配置字典，覆盖默认配置
+            
+        需求: 2.1, 2.2
         """
         self.模型路径 = 模型路径 or YOLO配置["模型路径"]
         self.置信度阈值 = 置信度阈值 if 置信度阈值 is not None else YOLO配置["置信度阈值"]
@@ -68,9 +109,14 @@ class YOLO检测器:
         self._已加载 = False
         self._上次检测结果: List[检测结果] = []
         
+        # 合并缓存配置
+        self._缓存配置 = 缓存配置.copy()
+        if 缓存配置项:
+            self._缓存配置.update(缓存配置项)
+        
         # 智能缓存集成
-        self._智能缓存: Optional['智能检测缓存'] = None
-        self._启用缓存 = 启用缓存 and 智能缓存可用
+        self._智能缓存: Optional['智能缓存'] = None
+        self._启用缓存 = 启用缓存 and 智能缓存可用 and self._缓存配置.get("启用", True)
         if self._启用缓存:
             self._初始化缓存()
         
@@ -418,14 +464,45 @@ class YOLO检测器:
     # ==================== 智能缓存集成方法 ====================
     
     def _初始化缓存(self) -> None:
-        """初始化智能缓存"""
+        """
+        初始化智能缓存
+        
+        根据缓存配置创建智能缓存实例
+        需求: 2.1, 2.2, 3.4
+        """
         if not 智能缓存可用:
             logger.warning("智能缓存模块不可用")
             return
         
         try:
-            self._智能缓存 = 智能检测缓存()
-            logger.info("智能缓存初始化成功")
+            # 创建缓存策略
+            策略 = 缓存策略(
+                全局阈值=self._缓存配置.get("全局相似度阈值", 0.95),
+                过期时间=self._缓存配置.get("过期时间", 0.5),
+                启用时间过期=self._缓存配置.get("启用时间过期", True),
+                比较方法=self._缓存配置.get("比较方法", "histogram"),
+                预热帧数=self._缓存配置.get("预热帧数", 1)
+            )
+            
+            # 添加优先区域
+            优先区域配置 = self._缓存配置.get("优先区域", [])
+            for 区域配置 in 优先区域配置:
+                try:
+                    策略.添加优先区域(
+                        名称=区域配置.get("名称", "未命名区域"),
+                        区域=tuple(区域配置.get("区域", [0.0, 0.0, 1.0, 1.0])),
+                        阈值=区域配置.get("阈值", 0.9)
+                    )
+                except (ValueError, KeyError) as e:
+                    logger.warning(f"添加优先区域失败: {e}")
+            
+            # 创建智能缓存实例
+            self._智能缓存 = 智能缓存(策略=策略)
+            
+            logger.info(f"智能缓存初始化成功: 阈值={策略.全局阈值}, "
+                       f"过期时间={策略.过期时间}s, "
+                       f"优先区域数={len(策略.优先区域列表)}")
+            
         except Exception as e:
             logger.error(f"智能缓存初始化失败: {e}")
             self._智能缓存 = None
@@ -467,6 +544,195 @@ class YOLO检测器:
         except Exception as e:
             logger.warning(f"获取缓存统计失败: {e}")
             return {"可用": True, "启用": self._启用缓存, "错误": str(e)}
+    
+    def 设置缓存相似度阈值(self, 阈值: float) -> None:
+        """
+        设置缓存相似度阈值
+        
+        Args:
+            阈值: 新的相似度阈值 (0.0-1.0)
+            
+        需求: 2.3
+        """
+        if self._智能缓存:
+            self._智能缓存.设置相似度阈值(阈值)
+            self._缓存配置["全局相似度阈值"] = 阈值
+    
+    def 设置缓存过期时间(self, 过期时间: float) -> None:
+        """
+        设置缓存过期时间
+        
+        Args:
+            过期时间: 新的过期时间（秒）
+        """
+        if self._智能缓存:
+            self._智能缓存.设置过期时间(过期时间)
+            self._缓存配置["过期时间"] = 过期时间
+    
+    def 添加缓存优先区域(self, 名称: str, 区域: Tuple[float, float, float, float], 
+                         阈值: float = 0.9) -> None:
+        """
+        添加缓存优先区域
+        
+        Args:
+            名称: 区域名称
+            区域: 相对坐标 (x, y, w, h)，范围 0.0-1.0
+            阈值: 该区域的相似度阈值
+            
+        需求: 3.1
+        """
+        if self._智能缓存 and self._智能缓存.策略:
+            self._智能缓存.策略.添加优先区域(名称, 区域, 阈值)
+            # 更新配置
+            优先区域列表 = self._缓存配置.get("优先区域", [])
+            优先区域列表.append({
+                "名称": 名称,
+                "区域": list(区域),
+                "阈值": 阈值
+            })
+            self._缓存配置["优先区域"] = 优先区域列表
+    
+    def 移除缓存优先区域(self, 名称: str) -> bool:
+        """
+        移除缓存优先区域
+        
+        Args:
+            名称: 要移除的区域名称
+            
+        Returns:
+            是否成功移除
+        """
+        if self._智能缓存 and self._智能缓存.策略:
+            结果 = self._智能缓存.策略.移除优先区域(名称)
+            if 结果:
+                # 更新配置
+                优先区域列表 = self._缓存配置.get("优先区域", [])
+                self._缓存配置["优先区域"] = [
+                    区域 for 区域 in 优先区域列表 if 区域.get("名称") != 名称
+                ]
+            return 结果
+        return False
+    
+    def 获取缓存配置(self) -> Dict[str, Any]:
+        """
+        获取当前缓存配置
+        
+        Returns:
+            缓存配置字典
+        """
+        return self._缓存配置.copy()
+    
+    def 更新缓存配置(self, 新配置: Dict[str, Any]) -> None:
+        """
+        更新缓存配置
+        
+        Args:
+            新配置: 新的缓存配置字典
+            
+        需求: 3.4
+        """
+        self._缓存配置.update(新配置)
+        
+        # 重新初始化缓存以应用新配置
+        if self._启用缓存:
+            self._初始化缓存()
+            logger.info("缓存配置已更新并重新初始化")
+    
+    def 从配置文件加载缓存配置(self, 配置路径: str) -> bool:
+        """
+        从配置文件加载缓存配置
+        
+        Args:
+            配置路径: JSON 配置文件路径
+            
+        Returns:
+            加载是否成功
+            
+        需求: 3.4
+        """
+        if not 智能缓存可用:
+            logger.warning("智能缓存模块不可用")
+            return False
+        
+        try:
+            策略 = 缓存策略.从配置文件创建(配置路径)
+            
+            # 更新内部配置
+            self._缓存配置.update(策略.to_dict())
+            
+            # 更新智能缓存的策略
+            if self._智能缓存:
+                self._智能缓存.策略 = 策略
+            
+            logger.info(f"从 {配置路径} 加载缓存配置成功")
+            return True
+            
+        except Exception as e:
+            logger.error(f"加载缓存配置失败: {e}")
+            return False
+    
+    def 保存缓存配置到文件(self, 配置路径: str) -> bool:
+        """
+        保存当前缓存配置到文件
+        
+        Args:
+            配置路径: JSON 配置文件路径
+            
+        Returns:
+            保存是否成功
+        """
+        if not 智能缓存可用:
+            logger.warning("智能缓存模块不可用")
+            return False
+        
+        try:
+            if self._智能缓存 and self._智能缓存.策略:
+                return self._智能缓存.策略.保存到配置(配置路径)
+            else:
+                # 创建临时策略保存配置
+                策略 = 缓存策略.from_dict(self._缓存配置)
+                return 策略.保存到配置(配置路径)
+                
+        except Exception as e:
+            logger.error(f"保存缓存配置失败: {e}")
+            return False
+    
+    def 预热缓存(self, 图像: np.ndarray) -> bool:
+        """
+        预热缓存
+        
+        在启动时执行初始检测以填充缓存
+        
+        Args:
+            图像: 用于预热的初始图像
+            
+        Returns:
+            预热是否成功
+            
+        需求: 5.1, 5.2
+        """
+        if not self._智能缓存:
+            logger.warning("智能缓存未初始化，无法预热")
+            return False
+        
+        # 设置检测器到智能缓存
+        self._智能缓存.设置检测器(self)
+        
+        return self._智能缓存.预热(图像)
+    
+    def 获取缓存预热状态(self) -> dict:
+        """
+        获取缓存预热状态
+        
+        Returns:
+            预热状态字典
+            
+        需求: 5.2
+        """
+        if not self._智能缓存:
+            return {"预热完成": False, "有缓存": False}
+        
+        return self._智能缓存.获取预热状态()
     
     # ==================== 异步检测集成方法 ====================
     
@@ -565,6 +831,9 @@ class YOLO检测器:
         Returns:
             包含所有子模块状态的字典
         """
+        缓存状态 = self.获取缓存统计()
+        缓存状态["配置"] = self._缓存配置
+        
         return {
             "模型": {
                 "已加载": self._已加载,
@@ -572,7 +841,7 @@ class YOLO检测器:
                 "置信度阈值": self.置信度阈值,
                 "NMS阈值": self.NMS阈值
             },
-            "缓存": self.获取缓存统计(),
+            "缓存": 缓存状态,
             "异步检测": self.获取异步检测状态()
         }
     

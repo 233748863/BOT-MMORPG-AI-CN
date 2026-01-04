@@ -3,6 +3,7 @@
 """
 
 import logging
+import os
 
 # 配置日志
 logger = logging.getLogger(__name__)
@@ -52,6 +53,61 @@ logger = logging.getLogger(__name__)
 # 训练轮数
 训练轮数 = 10
 
+# ==================== 推理后端设置 ====================
+# 需求: 4.4 - 提供配置选项来选择首选的推理后端
+
+# ==================== 屏幕截取设置 ====================
+# 需求: 2.4 - 记录正在使用的截取后端
+
+# 首选截取后端
+# 可选值: "auto"(自动检测), "dxgi"(DXGI Desktop Duplication), "mss"(MSS), "gdi"(GDI), "pil"(PIL)
+# auto: 根据系统能力自动选择最佳后端
+# dxgi: 使用 DXGI Desktop Duplication API（Windows 8+，最快）
+# mss: 使用 MSS 库（跨平台，较快）
+# gdi: 使用 GDI（Windows 原生，兼容性好）
+# pil: 使用 PIL/Pillow（通用回退方案）
+首选截取后端 = "auto"
+
+# 是否启用截取回退机制
+# 启用后，当首选后端失败时会自动尝试其他后端
+启用截取回退 = True
+
+# 是否启用截取性能监控
+# 启用后，会记录截取时间等性能指标
+启用截取性能监控 = True
+
+# 截取显示器索引
+# 0 表示主显示器，1 表示第二显示器，以此类推
+截取显示器索引 = 0
+
+# 截取配置文件路径
+截取配置路径 = "配置/截取配置.json"
+
+# 首选推理后端
+# 可选值: "auto"(自动检测), "onnx"(ONNX Runtime), "tflearn"(TFLearn)
+# auto: 根据模型文件格式自动选择后端
+# onnx: 优先使用 ONNX Runtime（推荐，速度更快）
+# tflearn: 使用原始 TFLearn 后端
+首选推理后端 = "auto"
+
+# 是否使用 GPU 加速
+# 需要安装 onnxruntime-gpu 才能使用 GPU
+# 如果 GPU 不可用，会自动回退到 CPU
+推理使用GPU = True
+
+# 是否启用统一推理引擎
+# 启用后，决策引擎会使用统一推理引擎进行模型推理
+# 需求: 4.2, 4.3 - 支持 TFLearn 和 ONNX 后端
+启用推理引擎 = True
+
+# 最大推理延迟阈值（毫秒）
+# 超过此值会记录警告
+# 需求: 2.2 - 50ms 内返回动作预测
+最大推理延迟 = 50
+
+# 推理配置文件路径
+推理配置路径 = "配置/推理配置.json"
+
 # ==================== 类别权重平衡设置 ====================
 # 需求 2.4: 将计算的权重保存到配置文件
 
@@ -64,6 +120,84 @@ logger = logging.getLogger(__name__)
 
 # 类别权重配置文件路径
 类别权重配置路径 = "配置/类别权重.json"
+
+# ==================== 数据增强设置 ====================
+# 需求 3.4: 增强管道应可通过配置文件或字典进行配置
+
+# 是否启用数据增强
+启用数据增强 = True
+
+# 数据增强配置文件路径
+数据增强配置路径 = "配置/数据增强.json"
+
+# 是否使用语义安全增强
+# 启用后，会自动限制变换强度以保护动作语义
+使用语义安全增强 = True
+
+# 默认增强配置
+# 当配置文件不存在时使用此默认配置
+默认增强配置 = {
+    "亮度调整": {
+        "启用": True,
+        "概率": 0.5,
+        "范围": [-0.2, 0.2],
+        "强度": 1.0
+    },
+    "对比度调整": {
+        "启用": True,
+        "概率": 0.5,
+        "范围": [0.8, 1.2],
+        "强度": 1.0
+    },
+    "水平翻转": {
+        "启用": True,
+        "概率": 0.5,
+        "强度": 1.0
+    },
+    "高斯噪声": {
+        "启用": True,
+        "概率": 0.3,
+        "标准差": 0.02,
+        "强度": 1.0
+    },
+    "颜色抖动": {
+        "启用": True,
+        "概率": 0.3,
+        "色调范围": 0.1,
+        "饱和度范围": 0.2,
+        "强度": 1.0
+    },
+    "旋转": {
+        "启用": False,
+        "概率": 0.3,
+        "角度范围": [-10, 10],
+        "强度": 1.0
+    },
+    "缩放裁剪": {
+        "启用": False,
+        "概率": 0.3,
+        "缩放范围": [0.9, 1.1],
+        "强度": 1.0
+    },
+    "高斯模糊": {
+        "启用": False,
+        "概率": 0.2,
+        "核大小范围": [3, 7],
+        "强度": 1.0
+    },
+    "光照模拟": {
+        "启用": False,
+        "概率": 0.3,
+        "强度范围": [0.7, 1.3],
+        "强度": 1.0
+    },
+    "透视变换": {
+        "启用": False,
+        "概率": 0.2,
+        "最大偏移": 0.05,
+        "强度": 1.0
+    }
+}
 
 # ==================== 采样策略设置 ====================
 # 是否启用数据采样
@@ -462,3 +596,710 @@ def 获取当前配置档案名称() -> str:
         logger.error(f"获取当前配置档案失败: {e}")
     
     return ""
+
+
+# ==================== 推理配置辅助函数 ====================
+# 需求: 4.4 - 提供配置选项来选择首选的推理后端
+
+def 获取推理配置() -> dict:
+    """获取推理相关配置
+    
+    从配置文件或全局变量获取推理配置。
+    支持从配置文件加载完整的推理设置。
+    
+    需求: 4.4 - 提供配置选项来选择首选的推理后端
+    
+    Returns:
+        包含推理配置的字典
+    """
+    import json
+    
+    配置 = {
+        "首选后端": 首选推理后端,
+        "使用GPU": 推理使用GPU,
+        "模型路径": 预训练模型路径,
+        "输入宽度": 模型输入宽度,
+        "输入高度": 模型输入高度,
+        "启用推理引擎": 启用推理引擎,
+        "最大延迟阈值": 最大推理延迟,
+        "预热次数": 10,
+    }
+    
+    # 尝试从配置文件加载
+    if os.path.exists(推理配置路径):
+        try:
+            with open(推理配置路径, 'r', encoding='utf-8') as f:
+                文件配置 = json.load(f)
+                # 移除说明字段
+                文件配置.pop("说明", None)
+                配置.update(文件配置)
+        except Exception as e:
+            logger.warning(f"加载推理配置文件失败: {e}")
+    
+    return 配置
+
+
+def 设置推理后端(后端: str) -> bool:
+    """设置首选推理后端
+    
+    Args:
+        后端: "auto", "onnx", "tflearn"
+        
+    Returns:
+        bool: 设置是否成功
+    """
+    global 首选推理后端
+    
+    有效后端 = ["auto", "onnx", "tflearn"]
+    if 后端 not in 有效后端:
+        logger.error(f"无效的推理后端: {后端}，有效值: {有效后端}")
+        return False
+    
+    首选推理后端 = 后端
+    logger.info(f"首选推理后端已设置为: {后端}")
+    
+    # 保存到配置文件
+    return 保存推理配置()
+
+
+def 设置推理GPU(使用GPU: bool) -> bool:
+    """设置是否使用GPU进行推理
+    
+    Args:
+        使用GPU: 是否使用GPU
+        
+    Returns:
+        bool: 设置是否成功
+    """
+    global 推理使用GPU
+    
+    推理使用GPU = 使用GPU
+    logger.info(f"推理GPU设置已更新: {'启用' if 使用GPU else '禁用'}")
+    
+    # 保存到配置文件
+    return 保存推理配置()
+
+
+def 保存推理配置() -> bool:
+    """保存推理配置到文件
+    
+    将当前推理配置保存到 JSON 文件。
+    
+    需求: 4.4 - 提供配置选项来选择首选的推理后端
+    
+    Returns:
+        bool: 保存是否成功
+    """
+    import json
+    
+    配置数据 = {
+        "模型路径": 预训练模型路径,
+        "首选后端": 首选推理后端,
+        "使用GPU": 推理使用GPU,
+        "输入宽度": 模型输入宽度,
+        "输入高度": 模型输入高度,
+        "预热次数": 10,
+        "最大延迟阈值": 最大推理延迟,
+        "启用推理引擎": 启用推理引擎,
+        "GPU配置": {
+            "设备ID": 0,
+            "内存限制GB": 2,
+            "优先使用CUDA": True,
+            "允许DirectML": True
+        },
+        "说明": {
+            "首选后端": "可选值: auto(自动检测), onnx(ONNX Runtime), tflearn(TFLearn)",
+            "使用GPU": "是否使用GPU加速，需要安装onnxruntime-gpu",
+            "预热次数": "推理引擎预热次数，用于稳定性能",
+            "最大延迟阈值": "最大允许推理延迟(毫秒)，超过此值会记录警告",
+            "启用推理引擎": "是否启用统一推理引擎",
+            "GPU配置": {
+                "设备ID": "GPU设备ID，默认为0",
+                "内存限制GB": "GPU内存限制(GB)",
+                "优先使用CUDA": "是否优先使用CUDA加速",
+                "允许DirectML": "是否允许使用DirectML(Windows)"
+            }
+        }
+    }
+    
+    try:
+        # 确保目录存在
+        目录 = os.path.dirname(推理配置路径)
+        if 目录 and not os.path.exists(目录):
+            os.makedirs(目录)
+        
+        with open(推理配置路径, 'w', encoding='utf-8') as f:
+            json.dump(配置数据, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"推理配置已保存到: {推理配置路径}")
+        return True
+    except Exception as e:
+        logger.error(f"保存推理配置失败: {e}")
+        return False
+
+
+def 创建统一推理引擎(模型路径: str = None):
+    """创建统一推理引擎实例
+    
+    使用当前配置创建推理引擎。
+    
+    Args:
+        模型路径: 可选，模型文件路径。如果不指定，使用配置中的路径。
+        
+    Returns:
+        统一推理引擎实例，如果创建失败返回 None
+    """
+    try:
+        from 核心.ONNX推理 import 统一推理引擎
+        
+        配置 = 获取推理配置()
+        
+        if 模型路径 is None:
+            模型路径 = 配置.get("模型路径", 预训练模型路径)
+        
+        引擎 = 统一推理引擎(
+            模型路径=模型路径,
+            首选后端=配置.get("首选后端", "auto"),
+            使用GPU=配置.get("使用GPU", True),
+            配置=配置
+        )
+        
+        return 引擎
+    except Exception as e:
+        logger.error(f"创建统一推理引擎失败: {e}")
+        return None
+
+
+def 设置启用推理引擎(启用: bool) -> bool:
+    """设置是否启用推理引擎
+    
+    Args:
+        启用: 是否启用推理引擎
+        
+    Returns:
+        bool: 设置是否成功
+        
+    需求: 4.4 - 提供配置选项来选择首选的推理后端
+    """
+    global 启用推理引擎
+    
+    启用推理引擎 = 启用
+    logger.info(f"推理引擎已{'启用' if 启用 else '禁用'}")
+    
+    # 保存到配置文件
+    return 保存推理配置()
+
+
+def 获取可用推理后端() -> list:
+    """获取可用的推理后端列表
+    
+    检测系统中可用的推理后端。
+    
+    Returns:
+        list: 可用后端列表，如 ["onnx", "tflearn"]
+    """
+    可用后端 = []
+    
+    # 检查 ONNX Runtime
+    try:
+        import onnxruntime
+        可用后端.append("onnx")
+        logger.debug(f"ONNX Runtime 可用，版本: {onnxruntime.__version__}")
+    except ImportError:
+        logger.debug("ONNX Runtime 不可用")
+    
+    # 检查 TFLearn
+    try:
+        import tflearn
+        可用后端.append("tflearn")
+        logger.debug("TFLearn 可用")
+    except ImportError:
+        logger.debug("TFLearn 不可用")
+    
+    return 可用后端
+
+
+def 获取推理后端信息() -> dict:
+    """获取推理后端详细信息
+    
+    返回所有推理后端的详细信息，包括版本、GPU支持等。
+    
+    Returns:
+        dict: 后端信息字典
+    """
+    信息 = {
+        "可用后端": 获取可用推理后端(),
+        "当前配置": {
+            "首选后端": 首选推理后端,
+            "使用GPU": 推理使用GPU,
+            "启用推理引擎": 启用推理引擎
+        }
+    }
+    
+    # ONNX Runtime 详细信息
+    try:
+        import onnxruntime as ort
+        信息["onnx"] = {
+            "版本": ort.__version__,
+            "可用提供者": ort.get_available_providers(),
+            "GPU支持": "CUDAExecutionProvider" in ort.get_available_providers() or 
+                       "DmlExecutionProvider" in ort.get_available_providers()
+        }
+    except ImportError:
+        信息["onnx"] = {"可用": False}
+    
+    # TFLearn 详细信息
+    try:
+        import tflearn
+        import tensorflow as tf
+        信息["tflearn"] = {
+            "可用": True,
+            "tensorflow版本": tf.__version__,
+            "GPU支持": len(tf.config.list_physical_devices('GPU')) > 0
+        }
+    except ImportError:
+        信息["tflearn"] = {"可用": False}
+    
+    return 信息
+
+
+# ==================== 屏幕截取配置辅助函数 ====================
+# 需求: 2.4 - 记录正在使用的截取后端
+
+def 获取截取配置() -> dict:
+    """获取屏幕截取相关配置
+    
+    从配置文件或全局变量获取截取配置。
+    支持从配置文件加载完整的截取设置。
+    
+    需求: 2.4 - 记录正在使用的截取后端
+    
+    Returns:
+        包含截取配置的字典
+    """
+    import json
+    
+    配置 = {
+        "首选后端": 首选截取后端,
+        "启用回退": 启用截取回退,
+        "启用性能监控": 启用截取性能监控,
+        "显示器索引": 截取显示器索引,
+    }
+    
+    # 尝试从配置文件加载
+    if os.path.exists(截取配置路径):
+        try:
+            with open(截取配置路径, 'r', encoding='utf-8') as f:
+                文件配置 = json.load(f)
+                # 移除说明字段
+                文件配置.pop("说明", None)
+                配置.update(文件配置)
+        except Exception as e:
+            logger.warning(f"加载截取配置文件失败: {e}")
+    
+    return 配置
+
+
+def 设置截取后端(后端: str) -> bool:
+    """设置首选截取后端
+    
+    需求: 2.4 - 记录正在使用的截取后端
+    
+    Args:
+        后端: "auto", "dxgi", "mss", "gdi", "pil"
+        
+    Returns:
+        bool: 设置是否成功
+    """
+    global 首选截取后端
+    
+    有效后端 = ["auto", "dxgi", "mss", "gdi", "pil"]
+    if 后端 not in 有效后端:
+        logger.error(f"无效的截取后端: {后端}，有效值: {有效后端}")
+        return False
+    
+    首选截取后端 = 后端
+    logger.info(f"首选截取后端已设置为: {后端}")
+    
+    # 保存到配置文件
+    return 保存截取配置()
+
+
+def 设置截取回退(启用: bool) -> bool:
+    """设置是否启用截取回退机制
+    
+    Args:
+        启用: 是否启用回退
+        
+    Returns:
+        bool: 设置是否成功
+    """
+    global 启用截取回退
+    
+    启用截取回退 = 启用
+    logger.info(f"截取回退机制已{'启用' if 启用 else '禁用'}")
+    
+    # 保存到配置文件
+    return 保存截取配置()
+
+
+def 设置截取性能监控(启用: bool) -> bool:
+    """设置是否启用截取性能监控
+    
+    Args:
+        启用: 是否启用性能监控
+        
+    Returns:
+        bool: 设置是否成功
+    """
+    global 启用截取性能监控
+    
+    启用截取性能监控 = 启用
+    logger.info(f"截取性能监控已{'启用' if 启用 else '禁用'}")
+    
+    # 保存到配置文件
+    return 保存截取配置()
+
+
+def 保存截取配置() -> bool:
+    """保存截取配置到文件
+    
+    将当前截取配置保存到 JSON 文件。
+    
+    需求: 2.4 - 记录正在使用的截取后端
+    
+    Returns:
+        bool: 保存是否成功
+    """
+    import json
+    
+    配置数据 = {
+        "首选后端": 首选截取后端,
+        "启用回退": 启用截取回退,
+        "启用性能监控": 启用截取性能监控,
+        "显示器索引": 截取显示器索引,
+        "说明": {
+            "首选后端": "可选值: auto(自动检测), dxgi(DXGI高性能), mss(跨平台), gdi(Windows原生), pil(通用回退)",
+            "启用回退": "当首选后端失败时是否自动尝试其他后端",
+            "启用性能监控": "是否记录截取时间等性能指标",
+            "显示器索引": "要截取的显示器索引，0为主显示器"
+        }
+    }
+    
+    try:
+        # 确保目录存在
+        目录 = os.path.dirname(截取配置路径)
+        if 目录 and not os.path.exists(目录):
+            os.makedirs(目录)
+        
+        with open(截取配置路径, 'w', encoding='utf-8') as f:
+            json.dump(配置数据, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"截取配置已保存到: {截取配置路径}")
+        return True
+    except Exception as e:
+        logger.error(f"保存截取配置失败: {e}")
+        return False
+
+
+def 获取可用截取后端() -> list:
+    """获取可用的截取后端列表
+    
+    检测系统中可用的截取后端。
+    
+    Returns:
+        list: 可用后端列表，如 ["dxgi", "mss", "gdi", "pil"]
+    """
+    try:
+        from 核心.屏幕截取 import 获取可用后端列表
+        return 获取可用后端列表()
+    except ImportError:
+        # 如果无法导入，返回默认值
+        return ["gdi"]
+
+
+def 获取截取后端信息() -> dict:
+    """获取截取后端详细信息
+    
+    返回所有截取后端的详细信息，包括可用性、性能等。
+    
+    Returns:
+        dict: 后端信息字典
+    """
+    try:
+        from 核心.屏幕截取 import 获取系统图形信息, 获取截取器状态
+        
+        信息 = {
+            "系统图形信息": 获取系统图形信息(),
+            "截取器状态": 获取截取器状态(),
+            "当前配置": {
+                "首选后端": 首选截取后端,
+                "启用回退": 启用截取回退,
+                "启用性能监控": 启用截取性能监控,
+                "显示器索引": 截取显示器索引
+            }
+        }
+        return 信息
+    except ImportError as e:
+        logger.warning(f"无法获取截取后端信息: {e}")
+        return {
+            "当前配置": {
+                "首选后端": 首选截取后端,
+                "启用回退": 启用截取回退,
+                "启用性能监控": 启用截取性能监控,
+                "显示器索引": 截取显示器索引
+            }
+        }
+
+
+def 应用截取配置():
+    """应用截取配置到截取模块
+    
+    将当前配置设置应用到屏幕截取模块。
+    应在修改配置后调用此函数使配置生效。
+    """
+    try:
+        from 核心.屏幕截取 import 设置截取配置 as 设置模块配置
+        
+        配置 = {
+            "首选后端": 首选截取后端,
+            "启用回退": 启用截取回退,
+            "启用性能监控": 启用截取性能监控,
+            "显示器索引": 截取显示器索引
+        }
+        
+        设置模块配置(配置)
+        logger.info("截取配置已应用到截取模块")
+    except ImportError as e:
+        logger.warning(f"无法应用截取配置: {e}")
+
+
+# ==================== 数据增强配置辅助函数 ====================
+# 需求 3.4: 增强管道应可通过配置文件或字典进行配置
+
+def 获取数据增强配置() -> dict:
+    """获取数据增强相关配置
+    
+    从配置文件或全局变量获取增强配置。
+    支持从配置文件加载完整的增强设置。
+    
+    需求 3.4: 增强管道应可通过配置文件或字典进行配置
+    
+    Returns:
+        包含增强配置的字典
+    """
+    import json
+    
+    配置 = 默认增强配置.copy()
+    
+    # 尝试从配置文件加载
+    if os.path.exists(数据增强配置路径):
+        try:
+            with open(数据增强配置路径, 'r', encoding='utf-8') as f:
+                文件配置 = json.load(f)
+                # 移除说明字段
+                文件配置.pop("说明", None)
+                文件配置.pop("元数据", None)
+                配置.update(文件配置)
+        except Exception as e:
+            logger.warning(f"加载数据增强配置文件失败: {e}")
+    
+    return 配置
+
+
+def 保存数据增强配置(配置: dict = None) -> bool:
+    """保存数据增强配置到文件
+    
+    将增强配置保存到 JSON 文件。
+    
+    需求 3.4: 增强管道应可通过配置文件或字典进行配置
+    
+    Args:
+        配置: 要保存的配置字典，如果为 None 则使用默认配置
+        
+    Returns:
+        bool: 保存是否成功
+    """
+    import json
+    
+    if 配置 is None:
+        配置 = 默认增强配置.copy()
+    
+    配置数据 = 配置.copy()
+    配置数据["元数据"] = {
+        "启用数据增强": 启用数据增强,
+        "使用语义安全增强": 使用语义安全增强
+    }
+    配置数据["说明"] = {
+        "启用": "是否启用该变换",
+        "概率": "应用变换的概率 (0.0-1.0)",
+        "强度": "变换强度 (0.0-1.0)",
+        "范围": "变换参数范围",
+        "元数据": {
+            "启用数据增强": "是否在训练时启用数据增强",
+            "使用语义安全增强": "是否使用语义安全限制保护动作语义"
+        }
+    }
+    
+    try:
+        # 确保目录存在
+        目录 = os.path.dirname(数据增强配置路径)
+        if 目录 and not os.path.exists(目录):
+            os.makedirs(目录)
+        
+        with open(数据增强配置路径, 'w', encoding='utf-8') as f:
+            json.dump(配置数据, f, ensure_ascii=False, indent=2)
+        
+        logger.info(f"数据增强配置已保存到: {数据增强配置路径}")
+        return True
+    except Exception as e:
+        logger.error(f"保存数据增强配置失败: {e}")
+        return False
+
+
+def 设置启用数据增强(启用: bool) -> bool:
+    """设置是否启用数据增强
+    
+    Args:
+        启用: 是否启用数据增强
+        
+    Returns:
+        bool: 设置是否成功
+    """
+    global 启用数据增强
+    
+    启用数据增强 = 启用
+    logger.info(f"数据增强已{'启用' if 启用 else '禁用'}")
+    
+    return True
+
+
+def 设置语义安全增强(启用: bool) -> bool:
+    """设置是否使用语义安全增强
+    
+    启用后，会自动限制变换强度以保护动作语义。
+    
+    Args:
+        启用: 是否启用语义安全增强
+        
+    Returns:
+        bool: 设置是否成功
+    """
+    global 使用语义安全增强
+    
+    使用语义安全增强 = 启用
+    logger.info(f"语义安全增强已{'启用' if 启用 else '禁用'}")
+    
+    return True
+
+
+def 创建数据增强器(配置: dict = None, 随机种子: int = None):
+    """创建数据增强器实例
+    
+    使用当前配置创建数据增强器。
+    
+    需求 3.4: 增强管道应可通过配置文件或字典进行配置
+    需求 4.1, 4.2: 与训练数据加载器集成
+    
+    Args:
+        配置: 可选，增强配置字典。如果不指定，使用配置文件或默认配置。
+        随机种子: 可选，随机种子用于可重复性。
+        
+    Returns:
+        数据增强器实例，如果创建失败返回 None
+    """
+    try:
+        from 工具.数据增强 import 数据增强器, 创建语义安全增强器
+        
+        if 配置 is None:
+            配置 = 获取数据增强配置()
+        
+        if 使用语义安全增强:
+            增强器 = 创建语义安全增强器(配置=配置, 随机种子=随机种子)
+        else:
+            增强器 = 数据增强器(配置=配置, 随机种子=随机种子)
+        
+        logger.info("数据增强器已创建")
+        return 增强器
+    except ImportError as e:
+        logger.error(f"无法导入数据增强模块: {e}")
+        return None
+    except Exception as e:
+        logger.error(f"创建数据增强器失败: {e}")
+        return None
+
+
+def 获取数据增强信息() -> dict:
+    """获取数据增强详细信息
+    
+    返回数据增强的配置和状态信息。
+    
+    Returns:
+        dict: 增强信息字典
+    """
+    信息 = {
+        "启用状态": 启用数据增强,
+        "使用语义安全": 使用语义安全增强,
+        "配置文件路径": 数据增强配置路径,
+        "配置文件存在": os.path.exists(数据增强配置路径),
+        "当前配置": 获取数据增强配置()
+    }
+    
+    # 检查数据增强模块是否可用
+    try:
+        from 工具.数据增强 import 数据增强器, 变换类型映射
+        信息["模块可用"] = True
+        信息["可用变换类型"] = list(变换类型映射.keys())
+    except ImportError:
+        信息["模块可用"] = False
+        信息["可用变换类型"] = []
+    
+    return 信息
+
+
+def 更新增强变换配置(变换名称: str, 配置更新: dict) -> bool:
+    """更新单个变换的配置
+    
+    Args:
+        变换名称: 变换类型名称（如 "亮度调整"）
+        配置更新: 要更新的配置项字典
+        
+    Returns:
+        bool: 更新是否成功
+    """
+    try:
+        配置 = 获取数据增强配置()
+        
+        if 变换名称 not in 配置:
+            配置[变换名称] = {}
+        
+        配置[变换名称].update(配置更新)
+        
+        return 保存数据增强配置(配置)
+    except Exception as e:
+        logger.error(f"更新增强变换配置失败: {e}")
+        return False
+
+
+def 启用增强变换(变换名称: str) -> bool:
+    """启用指定的增强变换
+    
+    Args:
+        变换名称: 变换类型名称
+        
+    Returns:
+        bool: 操作是否成功
+    """
+    return 更新增强变换配置(变换名称, {"启用": True})
+
+
+def 禁用增强变换(变换名称: str) -> bool:
+    """禁用指定的增强变换
+    
+    Args:
+        变换名称: 变换类型名称
+        
+    Returns:
+        bool: 操作是否成功
+    """
+    return 更新增强变换配置(变换名称, {"启用": False})

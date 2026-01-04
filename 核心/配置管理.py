@@ -1,13 +1,19 @@
 """
 配置管理模块
 定义游戏配置档案、窗口配置、按键映射、UI区域等数据结构
+
+需求: 3.1, 3.2, 3.5, 5.3, 5.4
 """
 
 from dataclasses import dataclass, field
-from typing import Dict, Tuple, List, Optional, Any
+from typing import Dict, Tuple, List, Optional, Any, TYPE_CHECKING
 from datetime import datetime
 import json
 import os
+import copy
+
+if TYPE_CHECKING:
+    from 核心.配置验证 import 配置验证器, 验证错误
 
 
 # ==================== 窗口配置数据类 ====================
@@ -282,6 +288,9 @@ class ConfigManager:
     - 加载配置档案
     - 删除配置档案
     - 列出所有档案
+    - 配置验证集成
+    - 默认值管理
+    - 导入导出功能
     
     存储结构:
         配置/profiles/           # 游戏配置档案目录
@@ -289,6 +298,8 @@ class ConfigManager:
         ├── game1.json          # 游戏1配置
         └── game2.json          # 游戏2配置
         配置/last_profile.txt   # 上次使用的档案名
+    
+    需求: 3.1, 3.2, 3.5, 5.3, 5.4
     """
     
     # 默认配置目录
@@ -296,18 +307,24 @@ class ConfigManager:
     # 上次使用档案记录文件
     LAST_PROFILE_FILE = "配置/last_profile.txt"
     
-    def __init__(self, profiles_dir: Optional[str] = None, last_profile_file: Optional[str] = None, auto_load_last: bool = True):
+    def __init__(self, profiles_dir: Optional[str] = None, last_profile_file: Optional[str] = None, 
+                 auto_load_last: bool = True, 模式定义: Dict[str, Dict[str, Any]] = None):
         """初始化配置管理器
         
         Args:
             profiles_dir: 配置档案存储目录，默认为 "配置/profiles"
             last_profile_file: 上次使用档案记录文件路径，默认为 "配置/last_profile.txt"
             auto_load_last: 是否自动加载上次使用的档案，默认为 True
+            模式定义: 配置模式定义，用于验证和默认值管理
+            
+        需求: 3.1, 3.2
         """
         self._profiles_dir = profiles_dir or self.DEFAULT_PROFILES_DIR
         self._last_profile_file = last_profile_file or self.LAST_PROFILE_FILE
         self._current_profile: Optional[GameProfile] = None
         self._has_unsaved_changes: bool = False
+        self._模式定义 = 模式定义 or self._获取默认模式定义()
+        self._验证器: Optional['配置验证器'] = None
         
         # 确保配置目录存在
         self._ensure_profiles_dir()
@@ -315,6 +332,63 @@ class ConfigManager:
         # 自动加载上次使用的档案
         if auto_load_last:
             self._auto_load_last_profile()
+    
+    def _获取默认模式定义(self) -> Dict[str, Dict[str, Any]]:
+        """获取默认配置模式定义
+        
+        Returns:
+            默认配置模式定义字典
+            
+        需求: 5.4
+        """
+        return {
+            "窗口设置": {
+                "窗口X": {"类型": "int", "默认值": 0, "最小值": 0, "描述": "窗口左上角X坐标"},
+                "窗口Y": {"类型": "int", "默认值": 0, "最小值": 0, "描述": "窗口左上角Y坐标"},
+                "窗口宽度": {"类型": "int", "默认值": 1920, "最小值": 100, "最大值": 7680, "描述": "窗口宽度"},
+                "窗口高度": {"类型": "int", "默认值": 1080, "最小值": 100, "最大值": 4320, "描述": "窗口高度"},
+            },
+            "模型设置": {
+                "模型路径": {"类型": "path", "默认值": "模型/决策模型.pth", "必需": True, "描述": "决策模型文件路径"},
+                "YOLO模型": {"类型": "path", "默认值": "模型/yolo.pt", "描述": "YOLO检测模型路径"},
+                "置信度阈值": {"类型": "float", "默认值": 0.5, "最小值": 0.0, "最大值": 1.0, "描述": "检测置信度阈值"},
+            },
+            "训练设置": {
+                "批次大小": {"类型": "int", "默认值": 32, "最小值": 1, "最大值": 256, "描述": "训练批次大小"},
+                "学习率": {"类型": "float", "默认值": 0.001, "最小值": 0.0001, "最大值": 0.1, "描述": "学习率"},
+                "训练轮次": {"类型": "int", "默认值": 100, "最小值": 1, "描述": "训练轮次数"},
+            },
+            "运行设置": {
+                "启用YOLO": {"类型": "bool", "默认值": True, "描述": "是否启用YOLO检测"},
+                "显示调试": {"类型": "bool", "默认值": False, "描述": "是否显示调试信息"},
+                "日志级别": {"类型": "choice", "默认值": "INFO", "选项": ["DEBUG", "INFO", "WARNING", "ERROR"], "描述": "日志级别"},
+            },
+        }
+    
+    def _获取验证器(self) -> '配置验证器':
+        """获取或创建配置验证器
+        
+        Returns:
+            配置验证器实例
+            
+        需求: 3.2
+        """
+        if self._验证器 is None:
+            from 核心.配置验证 import 配置验证器
+            self._验证器 = 配置验证器(self._模式定义)
+        return self._验证器
+    
+    @property
+    def 模式定义(self) -> Dict[str, Dict[str, Any]]:
+        """获取配置模式定义"""
+        return self._模式定义
+    
+    @模式定义.setter
+    def 模式定义(self, 值: Dict[str, Dict[str, Any]]):
+        """设置配置模式定义"""
+        self._模式定义 = 值 or self._获取默认模式定义()
+        # 重置验证器以使用新的模式定义
+        self._验证器 = None
     
     def _ensure_profiles_dir(self) -> None:
         """确保配置档案目录存在"""
@@ -451,17 +525,96 @@ class ConfigManager:
         
         return profile
     
-    def save_profile(self, profile: GameProfile) -> bool:
+    def 验证配置(self, 配置: Dict[str, Any]) -> Tuple[bool, List['验证错误']]:
+        """验证配置有效性
+        
+        根据模式定义验证配置字典的有效性。
+        
+        Args:
+            配置: 要验证的配置字典
+            
+        Returns:
+            (是否有效, 错误列表)
+            
+        需求: 3.2
+        """
+        验证器 = self._获取验证器()
+        return 验证器.验证配置(配置)
+    
+    def 验证档案(self, profile: GameProfile) -> Tuple[bool, List['验证错误']]:
+        """验证配置档案有效性
+        
+        将 GameProfile 转换为字典后进行验证。
+        
+        Args:
+            profile: 要验证的配置档案
+            
+        Returns:
+            (是否有效, 错误列表)
+            
+        需求: 3.2
+        """
+        if profile is None:
+            from 核心.配置验证 import 验证错误
+            return False, [验证错误(
+                参数名="profile",
+                错误类型="required",
+                错误信息="配置档案不能为空",
+                当前值=None,
+                期望值="有效的配置档案"
+            )]
+        
+        # 将档案转换为适合验证的格式
+        配置字典 = self._档案转验证格式(profile)
+        return self.验证配置(配置字典)
+    
+    def _档案转验证格式(self, profile: GameProfile) -> Dict[str, Any]:
+        """将配置档案转换为验证格式
+        
+        Args:
+            profile: 配置档案
+            
+        Returns:
+            适合验证的配置字典
+        """
+        return {
+            "窗口设置": {
+                "窗口X": profile.window_config.x,
+                "窗口Y": profile.window_config.y,
+                "窗口宽度": profile.window_config.width,
+                "窗口高度": profile.window_config.height,
+            },
+            "模型设置": {
+                "模型路径": profile.detection_params.yolo_model_path,
+                "YOLO模型": profile.detection_params.yolo_model_path,
+                "置信度阈值": profile.detection_params.confidence_threshold,
+            },
+            "训练设置": {
+                "批次大小": 32,  # 默认值，档案中未存储
+                "学习率": 0.001,  # 默认值，档案中未存储
+                "训练轮次": 100,  # 默认值，档案中未存储
+            },
+            "运行设置": {
+                "启用YOLO": True,  # 默认值，档案中未存储
+                "显示调试": False,  # 默认值，档案中未存储
+                "日志级别": "INFO",  # 默认值，档案中未存储
+            },
+        }
+    
+    def save_profile(self, profile: GameProfile, 验证: bool = True) -> bool:
         """保存配置档案
         
         Args:
             profile: 要保存的配置档案
+            验证: 是否在保存前验证配置，默认为 True
             
         Returns:
             保存是否成功
             
         Raises:
-            ValueError: 如果配置档案无效
+            ValueError: 如果配置档案无效或验证失败
+            
+        需求: 3.1
         """
         if profile is None:
             raise ValueError("配置档案不能为空")
@@ -470,6 +623,14 @@ class ConfigManager:
         is_complete, missing = profile.validate_completeness()
         if not is_complete:
             raise ValueError(f"配置档案不完整，缺少字段: {missing}")
+        
+        # 配置验证（可选）
+        if 验证:
+            有效, 错误列表 = self.验证档案(profile)
+            if not 有效:
+                验证器 = self._获取验证器()
+                错误摘要 = 验证器.生成错误摘要(错误列表)
+                raise ValueError(f"配置验证失败: {错误摘要}")
         
         # 更新时间戳
         profile.update_timestamp()
@@ -723,3 +884,209 @@ class ConfigManager:
             raise ValueError(f"导入文件缺少必要字段: {e}")
         except (IOError, OSError) as e:
             raise IOError(f"读取导入文件失败: {e}")
+    
+    # ==================== 默认值管理 ====================
+    # 需求: 5.3, 5.4
+    
+    def 获取默认值(self, 参数名: str = None) -> Any:
+        """获取参数默认值
+        
+        Args:
+            参数名: 参数名称，格式为 "分区.参数" 或单独的参数名。
+                   如果为 None，返回所有默认值。
+            
+        Returns:
+            参数的默认值，或所有默认值的字典
+            
+        需求: 5.4
+        """
+        if 参数名 is None:
+            # 返回所有默认值
+            return self._获取所有默认值()
+        
+        # 解析参数名
+        if "." in 参数名:
+            分区名, 实际参数名 = 参数名.split(".", 1)
+            分区定义 = self._模式定义.get(分区名, {})
+            参数定义 = 分区定义.get(实际参数名, {})
+        else:
+            # 在所有分区中查找
+            参数定义 = {}
+            for 分区定义 in self._模式定义.values():
+                if 参数名 in 分区定义:
+                    参数定义 = 分区定义[参数名]
+                    break
+        
+        return 参数定义.get("默认值")
+    
+    def _获取所有默认值(self) -> Dict[str, Dict[str, Any]]:
+        """获取所有参数的默认值
+        
+        Returns:
+            按分区组织的默认值字典
+            
+        需求: 5.4
+        """
+        默认值 = {}
+        for 分区名, 分区定义 in self._模式定义.items():
+            默认值[分区名] = {}
+            for 参数名, 参数定义 in 分区定义.items():
+                if "默认值" in 参数定义:
+                    默认值[分区名][参数名] = 参数定义["默认值"]
+        return 默认值
+    
+    def 重置为默认(self, 分区: str = None) -> Dict[str, Any]:
+        """重置配置为默认值
+        
+        Args:
+            分区: 分区名称，如果为 None 则重置所有分区
+            
+        Returns:
+            重置后的配置字典
+            
+        需求: 5.3
+        """
+        所有默认值 = self._获取所有默认值()
+        
+        if 分区 is None:
+            # 重置所有分区
+            return copy.deepcopy(所有默认值)
+        
+        # 重置指定分区
+        if 分区 in 所有默认值:
+            return {分区: copy.deepcopy(所有默认值[分区])}
+        
+        return {}
+    
+    def 获取分区列表(self) -> List[str]:
+        """获取所有配置分区名称
+        
+        Returns:
+            分区名称列表
+        """
+        return list(self._模式定义.keys())
+    
+    def 获取分区参数(self, 分区名: str) -> Dict[str, Dict[str, Any]]:
+        """获取指定分区的所有参数定义
+        
+        Args:
+            分区名: 分区名称
+            
+        Returns:
+            参数定义字典
+        """
+        return self._模式定义.get(分区名, {})
+    
+    # ==================== 增强的导入导出功能 ====================
+    # 需求: 3.5
+    
+    def 导出配置(self, 配置: Dict[str, Any], 导出路径: str) -> bool:
+        """导出配置字典到文件
+        
+        Args:
+            配置: 要导出的配置字典
+            导出路径: 导出文件的目标路径
+            
+        Returns:
+            导出是否成功
+            
+        Raises:
+            ValueError: 如果参数无效
+            IOError: 如果文件写入失败
+            
+        需求: 3.5
+        """
+        if 配置 is None:
+            raise ValueError("配置不能为空")
+        if not 导出路径 or not 导出路径.strip():
+            raise ValueError("导出路径不能为空")
+        
+        # 确保目标目录存在
+        目标目录 = os.path.dirname(导出路径)
+        if 目标目录 and not os.path.exists(目标目录):
+            os.makedirs(目标目录)
+        
+        try:
+            # 添加元数据
+            导出数据 = {
+                "_元数据": {
+                    "导出时间": datetime.now().isoformat(),
+                    "版本": "1.0"
+                },
+                "配置": 配置
+            }
+            
+            with open(导出路径, 'w', encoding='utf-8') as f:
+                json.dump(导出数据, f, ensure_ascii=False, indent=2)
+            return True
+        except (IOError, OSError) as e:
+            raise IOError(f"导出配置失败: {e}")
+    
+    def 导入配置(self, 导入路径: str) -> Dict[str, Any]:
+        """从文件导入配置字典
+        
+        Args:
+            导入路径: 要导入的文件路径
+            
+        Returns:
+            导入的配置字典
+            
+        Raises:
+            FileNotFoundError: 如果文件不存在
+            ValueError: 如果文件格式无效
+            IOError: 如果文件读取失败
+            
+        需求: 3.5
+        """
+        if not 导入路径 or not 导入路径.strip():
+            raise ValueError("导入路径不能为空")
+        
+        if not os.path.exists(导入路径):
+            raise FileNotFoundError(f"文件 '{导入路径}' 不存在")
+        
+        try:
+            with open(导入路径, 'r', encoding='utf-8') as f:
+                数据 = json.load(f)
+            
+            # 检查是否是新格式（带元数据）
+            if "_元数据" in 数据 and "配置" in 数据:
+                return 数据["配置"]
+            
+            # 兼容旧格式（直接是配置字典）
+            return 数据
+            
+        except json.JSONDecodeError as e:
+            raise ValueError(f"文件格式无效，不是有效的JSON: {e}")
+        except (IOError, OSError) as e:
+            raise IOError(f"读取导入文件失败: {e}")
+    
+    def 加载配置(self, 配置路径: str) -> Dict[str, Any]:
+        """从文件加载配置
+        
+        这是 导入配置 的别名方法，提供更直观的接口。
+        
+        Args:
+            配置路径: 配置文件路径
+            
+        Returns:
+            配置字典
+            
+        需求: 3.2
+        """
+        return self.导入配置(配置路径)
+    
+    def 保存配置(self, 配置: Dict[str, Any], 配置路径: str) -> bool:
+        """保存配置到文件
+        
+        这是 导出配置 的别名方法，提供更直观的接口。
+        
+        Args:
+            配置: 配置字典
+            配置路径: 配置文件路径
+            
+        Returns:
+            保存是否成功
+            
+        需求: 3.1
+        """
+        return self.导出配置(配置, 配置路径)

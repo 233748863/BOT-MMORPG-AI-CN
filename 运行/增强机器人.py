@@ -245,9 +245,33 @@ class 增强版游戏AI机器人:
             
             self._决策引擎可用 = True
             logger.info("决策引擎初始化成功")
+            
+            # 注册模型切换反馈回调 - 需求: 4.2
+            self._注册模型切换反馈()
+            
         except Exception as e:
             logger.error(f"决策引擎初始化失败: {e}")
             self._决策引擎可用 = False
+    
+    def _注册模型切换反馈(self):
+        """
+        注册模型切换反馈回调
+        
+        需求: 4.2 - 显示新的活动模型名称
+        需求: 4.4 - 在状态输出中显示当前活动模型
+        """
+        if not self.决策引擎 or not self.决策引擎._模型管理器:
+            return
+        
+        def 切换反馈(原模型: str, 新模型: str):
+            """模型切换反馈回调"""
+            print(f"\n🔄 模型已切换: {原模型} → {新模型}")
+        
+        try:
+            self.决策引擎._模型管理器.注册切换回调(切换反馈)
+            logger.info("已注册模型切换反馈回调")
+        except Exception as e:
+            logger.warning(f"注册模型切换反馈失败: {e}")
     
     def _状态变更处理(self, 旧状态: 游戏状态, 新状态: 游戏状态):
         """状态变更回调处理"""
@@ -405,6 +429,43 @@ class 增强版游戏AI机器人:
         self._YOLO可用 = False
         self._状态识别可用 = False
         self._决策引擎可用 = False
+    
+    def _处理模型切换快捷键(self, 按键: List[str]):
+        """
+        处理模型切换快捷键
+        
+        在主循环中调用，检测并处理模型切换快捷键。
+        
+        Args:
+            按键: 当前按下的按键列表
+            
+        需求: 4.1 - 支持模型切换的快捷键
+        """
+        if not self.决策引擎:
+            return
+        
+        # 检查 F1-F9 快捷键
+        模型切换键 = ['F1', 'F2', 'F3', 'F4', 'F5', 'F6', 'F7', 'F8', 'F9']
+        
+        for 键 in 模型切换键:
+            if 键 in 按键:
+                try:
+                    # F9 是循环切换键
+                    if 键 == 'F9':
+                        新模型 = self.决策引擎.循环切换模型()
+                        if 新模型:
+                            logger.info(f"循环切换到模型: {新模型}")
+                    else:
+                        # F1-F8 是直接切换键
+                        结果 = self.决策引擎.处理快捷键(键)
+                        if 结果:
+                            logger.info(f"快捷键 {键} 触发模型切换")
+                    
+                    # 防止重复触发
+                    time.sleep(0.3)
+                    break
+                except Exception as e:
+                    logger.warning(f"处理模型切换快捷键失败: {e}")
 
     def 处理卡住(self):
         """处理角色卡住的情况"""
@@ -477,6 +538,8 @@ class 增强版游戏AI机器人:
         print("  - 按 ESC 退出")
         if 增强可用:
             print("  - 按 I 显示增强模块状态")
+            print("  - 按 F1-F8 切换到指定模型")
+            print("  - 按 F9 循环切换模型")
         print()
         
         # 倒计时
@@ -524,6 +587,10 @@ class 增强版游戏AI机器人:
                 if 'I' in 按键 and 增强可用:
                     self._显示增强状态()
                     time.sleep(0.5)
+                
+                # 处理模型切换快捷键 - 需求: 4.1
+                if 增强可用 and self._决策引擎可用:
+                    self._处理模型切换快捷键(按键)
                 
                 if not 已暂停:
                     循环开始时间 = time.time()
@@ -598,6 +665,22 @@ class 增强版游戏AI机器人:
         print(f"  检测间隔:   每 {self.当前检测间隔} 帧")
         print(f"  当前帧率:   {self.当前帧率:.1f} FPS")
         print(f"  性能模式:   {'低性能' if self._已降级 else '正常'}")
+        
+        # 显示模型管理状态 - 需求: 4.4
+        if self._决策引擎可用 and self.决策引擎:
+            当前模型 = self.决策引擎.获取当前模型()
+            可用模型 = self.决策引擎.获取可用模型列表()
+            快捷键映射 = self.决策引擎.获取快捷键映射()
+            
+            print("-" * 40)
+            print(f"  当前模型:   {当前模型 or '无'}")
+            print(f"  可用模型数: {len(可用模型)}")
+            if 快捷键映射:
+                print("  快捷键映射:")
+                for 键, 模型 in 快捷键映射.items():
+                    标记 = " ★" if 模型 == 当前模型 else ""
+                    print(f"    {键}: {模型}{标记}")
+        
         print("=" * 40 + "\n")
     
     def _显示决策统计(self):

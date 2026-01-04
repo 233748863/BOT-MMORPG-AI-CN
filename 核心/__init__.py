@@ -40,6 +40,9 @@ from .配置管理 import (
     GameProfile, ConfigManager
 )
 
+# 档案管理模块
+from .档案管理 import 档案管理器
+
 # 智能录制模块
 from .智能录制 import (
     事件类型, 价值等级, GameEvent, RecordingSegment, RecordingStatistics,
@@ -55,4 +58,10 @@ from .自动调参 import (
 # 模块管理器（错误降级机制）
 from .模块管理 import (
     模块状态, 模块信息, 模块管理器, 获取模块管理器, 重置模块管理器
+)
+
+# 模型热切换模块
+from .模型管理 import (
+    模型槽位, 切换事件, 模型配置, 管理器配置,
+    模型管理器 as 热切换模型管理器, 创建模型管理器
 )

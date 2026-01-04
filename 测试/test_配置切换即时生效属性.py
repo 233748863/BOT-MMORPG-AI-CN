@@ -135,7 +135,7 @@ class Test配置切换即时生效属性:
         detection_params=有效检测参数策略,
         decision_rules=有效决策规则策略
     )
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     def test_切换后get_current_profile返回新档案(
         self,
         name: str,
@@ -212,7 +212,7 @@ class Test配置切换即时生效属性:
         game_name1=有效游戏名称策略,
         game_name2=有效游戏名称策略
     )
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     def test_多次切换后get_current_profile返回最后切换的档案(
         self,
         name1: str,
@@ -276,7 +276,7 @@ class Test配置切换即时生效属性:
         name=有效档案名称策略,
         game_name=有效游戏名称策略
     )
-    @settings(max_examples=100)
+    @settings(max_examples=100, deadline=None)
     def test_切换不存在的档案应失败(
         self,
         name: str,

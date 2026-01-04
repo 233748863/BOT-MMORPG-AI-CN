@@ -211,6 +211,7 @@ class MainWindow(QMainWindow):
         
         # 创建自定义标题栏
         self._标题栏 = 自定义标题栏(self)
+        self._标题栏.配置请求.connect(self._打开配置界面)  # 连接配置按钮信号
         主垂直布局.addWidget(self._标题栏)
         
         # 创建内容区容器
@@ -495,6 +496,42 @@ class MainWindow(QMainWindow):
         """处理配置重置完成"""
         self._状态栏.showMessage("配置已重置", 3000)
     
+    def _打开配置界面(self) -> None:
+        """打开独立的配置界面对话框
+        
+        需求: 1.1 - 配置界面入口
+        """
+        try:
+            from 界面.配置界面 import 配置界面
+            
+            # 创建配置界面对话框
+            配置对话框 = 配置界面(parent=self)
+            
+            # 连接保存信号
+            配置对话框.配置已保存.connect(self._处理配置对话框保存)
+            配置对话框.配置已重置.connect(self._处理配置对话框重置)
+            
+            # 显示对话框
+            配置对话框.exec()
+            
+        except ImportError as e:
+            self._通知服务.显示错误("配置界面不可用", f"无法加载配置界面模块: {e}")
+        except Exception as e:
+            self._通知服务.显示错误("打开配置界面失败", str(e))
+    
+    def _处理配置对话框保存(self, 配置: dict) -> None:
+        """处理配置对话框保存
+        
+        参数:
+            配置: 保存的配置字典
+        """
+        self._状态栏.showMessage("配置已保存", 3000)
+        self._通知服务.显示成功("配置已保存", "配置已成功保存")
+    
+    def _处理配置对话框重置(self) -> None:
+        """处理配置对话框重置"""
+        self._状态栏.showMessage("配置已重置为默认值", 3000)
+    
     def _注册数据管理页(self) -> None:
         """注册数据管理页面组件"""
         # 通过页面管理器获取页面（会记录创建时间）
@@ -752,12 +789,12 @@ class MainWindow(QMainWindow):
         已处理 = False
         
         # 如果当前在数据收集页面且正在录制，处理暂停
-        if self._当前页面 == "数据收集" and self._数据收集页.是否录制中():
+        if self._当前页面 == "数据收集" and self._数据收集页 is not None and self._数据收集页.是否录制中():
             self._数据收集页.处理快捷键暂停()
             已处理 = True
         
         # 如果当前在运行页面且正在运行，处理暂停
-        if self._当前页面 == "运行" and self._运行页.是否运行中():
+        if self._当前页面 == "运行" and self._运行页 is not None and self._运行页.是否运行中():
             self._运行页.处理快捷键暂停()
             已处理 = True
         
@@ -783,17 +820,17 @@ class MainWindow(QMainWindow):
         已处理 = False
         
         # 如果当前在数据收集页面，处理停止
-        if self._当前页面 == "数据收集":
+        if self._当前页面 == "数据收集" and self._数据收集页 is not None:
             self._数据收集页.处理快捷键停止()
             已处理 = True
         
         # 如果当前在训练页面且正在训练，处理停止
-        if self._当前页面 == "训练" and self._训练页.是否训练中():
+        if self._当前页面 == "训练" and self._训练页 is not None and self._训练页.是否训练中():
             self._停止训练()
             已处理 = True
         
         # 如果当前在运行页面，处理停止
-        if self._当前页面 == "运行":
+        if self._当前页面 == "运行" and self._运行页 is not None:
             self._运行页.处理快捷键停止()
             已处理 = True
         
@@ -821,8 +858,11 @@ class MainWindow(QMainWindow):
         """处理保存配置快捷键"""
         # 如果当前在配置页面，触发保存
         if self._当前页面 == "配置":
-            self._配置页._保存配置()
-            self._状态栏.showMessage("快捷键: 保存配置", 2000)
+            if self._配置页 is not None:
+                self._配置页._保存配置()
+                self._状态栏.showMessage("快捷键: 保存配置", 2000)
+            else:
+                self._状态栏.showMessage("快捷键: 配置页面未初始化", 2000)
         else:
             self._状态栏.showMessage("快捷键: 请先切换到配置页面", 2000)
     
