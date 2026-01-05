@@ -49,7 +49,7 @@ class 训练设置卡片(Card):
     模式改变 = Signal(str)
     
     def __init__(self, parent=None):
-        super().__init__("训练设置", "⚙️", parent)
+        super().__init__("训练设置", "", parent)
         self._初始化内容()
     
     def _初始化内容(self) -> None:
@@ -236,6 +236,7 @@ class 训练进度卡片(Card):
         # 进度条
         self._进度条 = QProgressBar()
         self._进度条.setFixedHeight(布局常量.进度条高度最大)
+        self._进度条.setMinimumHeight(布局常量.进度条高度最大)
         self._进度条.setValue(0)
         self._进度条.setTextVisible(True)
         self._进度条.setFormat("%p%")
@@ -245,8 +246,9 @@ class 训练进度卡片(Card):
                 border-radius: {布局常量.进度条圆角}px;
                 background-color: {颜色.边框};
                 text-align: center;
-                font-size: {布局常量.次要文字字号}px;
+                font-size: {布局常量.正文字号}px;
                 color: {颜色.文字};
+                min-height: {布局常量.进度条高度最大}px;
             }}
             QProgressBar::chunk {{
                 background-color: {颜色.成功};
@@ -283,7 +285,7 @@ class 训练进度卡片(Card):
         内容布局.addWidget(分隔线)
         
         # 损失曲线标题
-        曲线标题 = QLabel("📊 损失曲线")
+        曲线标题 = QLabel("损失曲线")
         曲线标题.setStyleSheet(f"""
             font-size: {布局常量.正文字号}px;
             font-weight: bold;
@@ -404,7 +406,7 @@ class 训练日志卡片(CardWithAction):
     """
     
     def __init__(self, parent=None):
-        super().__init__("训练日志", "📝", parent)
+        super().__init__("训练日志", "", parent)
         self._初始化内容()
     
     def _初始化内容(self) -> None:
@@ -466,8 +468,8 @@ class 训练日志卡片(CardWithAction):
         图标映射 = {
             "信息": "ℹ️",
             "警告": "⚠️",
-            "错误": "❌",
-            "成功": "✅",
+            "错误": "[X]",
+            "成功": "[OK]",
         }
         
         日志颜色 = 颜色映射.get(级别, 颜色.文字)
@@ -537,7 +539,7 @@ class 训练页(QWidget):
         主布局.setSpacing(布局常量.卡片间距)
         
         # 页面标题
-        标题 = QLabel("🧠 模型训练")
+        标题 = QLabel("模型训练")
         标题.setStyleSheet(f"""
             font-size: {布局常量.页面标题字号}px;
             font-weight: bold;

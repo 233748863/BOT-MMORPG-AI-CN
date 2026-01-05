@@ -225,7 +225,7 @@ class StatusMonitor(QWidget):
         状态卡片布局.setSpacing(4)
         
         # 标题
-        标题 = QLabel("📊 状态监控")
+        标题 = QLabel("状态监控")
         标题.setProperty("class", "subtitle")
         状态卡片布局.addWidget(标题)
         
@@ -244,7 +244,7 @@ class StatusMonitor(QWidget):
         预览卡片布局.setSpacing(8)
         
         # 预览标题
-        预览标题 = QLabel("🎮 画面预览")
+        预览标题 = QLabel("画面预览")
         预览标题.setProperty("class", "subtitle")
         预览卡片布局.addWidget(预览标题)
         

@@ -565,3 +565,41 @@ def 获取状态样式(状态类型: str) -> str:
         "错误": "status-error",
     }
     return 样式映射.get(状态类型, "")
+
+
+def 应用全局字体(app):
+    """应用支持 emoji 的全局字体
+    
+    解决 Windows 系统默认字体不支持 emoji 显示的问题。
+    使用字体回退链确保中文和 emoji 都能正常显示。
+    
+    字体回退链:
+    - Microsoft YaHei UI: 中文显示
+    - Segoe UI Emoji: emoji 彩色显示 (Windows 内置)
+    - Segoe UI Symbol: emoji 黑白备选
+    - Arial: 最终回退
+    
+    Args:
+        app: QApplication 实例
+        
+    需求: 1.1, 1.2, 1.3, 2.1, 2.2, 2.3
+    """
+    try:
+        from PySide6.QtGui import QFont
+        
+        # 创建支持 emoji 的字体
+        字体 = QFont()
+        # 使用 setFamilies 设置字体回退链
+        字体.setFamilies([
+            "Microsoft YaHei UI",   # 中文字体
+            "Segoe UI Emoji",       # Windows emoji 字体
+            "Segoe UI Symbol",      # 符号备选
+            "Arial"                 # 最终回退
+        ])
+        字体.setPointSize(9)
+        
+        # 应用到整个应用程序
+        app.setFont(字体)
+        
+    except Exception as e:
+        print(f"警告: 应用全局字体失败: {e}")

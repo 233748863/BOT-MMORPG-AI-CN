@@ -29,7 +29,7 @@ from PySide6.QtGui import QFont
 
 from 界面.样式.主题 import 颜色
 from 界面.样式.布局常量 import 布局常量
-from 界面.组件.通用组件 import Card
+from 界面.组件.通用组件 import Card, 确认对话框, 提示对话框
 
 
 class 配置页(QWidget):
@@ -70,7 +70,7 @@ class 配置页(QWidget):
         主布局.setSpacing(布局常量.卡片间距)
         
         # 页面标题
-        标题 = QLabel("⚙️ 配置管理")
+        标题 = QLabel("配置管理")
         标题.setStyleSheet(f"""
             font-size: {布局常量.页面标题字号}px;
             font-weight: bold;
@@ -112,10 +112,10 @@ class 配置页(QWidget):
         """)
         
         # 添加4个标签页 (Requirements 5.2)
-        self._标签页.addTab(self._创建游戏窗口标签页(), "🎮 游戏窗口")
-        self._标签页.addTab(self._创建模型设置标签页(), "🧠 模型设置")
-        self._标签页.addTab(self._创建训练参数标签页(), "📚 训练参数")
-        self._标签页.addTab(self._创建增强模块标签页(), "🚀 增强模块")
+        self._标签页.addTab(self._创建游戏窗口标签页(), "游戏窗口")
+        self._标签页.addTab(self._创建模型设置标签页(), "模型设置")
+        self._标签页.addTab(self._创建训练参数标签页(), "训练参数")
+        self._标签页.addTab(self._创建增强模块标签页(), "增强模块")
         
         主布局.addWidget(self._标签页, 1)
         
@@ -124,7 +124,7 @@ class 配置页(QWidget):
     
     def _创建档案管理卡片(self) -> Card:
         """创建档案管理卡片 (需求 6.1, 6.3, 6.5)"""
-        卡片 = Card("📁 配置档案")
+        卡片 = Card("配置档案")
         
         # 档案管理布局
         档案布局 = QHBoxLayout()
@@ -138,7 +138,7 @@ class 配置页(QWidget):
         档案布局.addWidget(self._档案选择)
         
         # 新建档案按钮
-        self._新建档案按钮 = QPushButton("➕ 新建")
+        self._新建档案按钮 = QPushButton("+ 新建")
         self._新建档案按钮.setFixedSize(70, 布局常量.按钮高度)
         self._新建档案按钮.setStyleSheet(f"""
             QPushButton {{
@@ -156,7 +156,7 @@ class 配置页(QWidget):
         档案布局.addWidget(self._新建档案按钮)
         
         # 导入按钮 (需求 6.5)
-        self._导入按钮 = QPushButton("📥 导入")
+        self._导入按钮 = QPushButton("导入")
         self._导入按钮.setFixedSize(70, 布局常量.按钮高度)
         self._导入按钮.setStyleSheet(f"""
             QPushButton {{
@@ -174,7 +174,7 @@ class 配置页(QWidget):
         档案布局.addWidget(self._导入按钮)
         
         # 导出按钮 (需求 6.3)
-        self._导出按钮 = QPushButton("📤 导出")
+        self._导出按钮 = QPushButton("导出")
         self._导出按钮.setFixedSize(70, 布局常量.按钮高度)
         self._导出按钮.setStyleSheet(f"""
             QPushButton {{
@@ -191,16 +191,16 @@ class 配置页(QWidget):
         self._导出按钮.clicked.connect(self._导出档案)
         档案布局.addWidget(self._导出按钮)
         
-        # 删除按钮
-        self._删除档案按钮 = QPushButton("🗑️")
-        self._删除档案按钮.setFixedSize(32, 布局常量.按钮高度)
+        # 删除按钮 (需求 4.1, 4.2, 4.3, 4.4)
+        self._删除档案按钮 = QPushButton("删除")
+        self._删除档案按钮.setFixedSize(60, 布局常量.按钮高度)
         self._删除档案按钮.setStyleSheet(f"""
             QPushButton {{
                 background-color: {颜色.卡片背景};
                 color: {颜色.错误};
                 border: 1px solid {颜色.边框};
                 border-radius: {布局常量.按钮圆角}px;
-                font-size: 14px;
+                font-size: {布局常量.按钮文字字号}px;
             }}
             QPushButton:hover {{
                 background-color: #FEE2E2;
@@ -247,7 +247,7 @@ class 配置页(QWidget):
         表单布局.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
         # 快捷选择分组 - 从进程获取窗口
-        分组标题0 = QLabel("🎯 快捷选择")
+        分组标题0 = QLabel("快捷选择")
         分组标题0.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -270,7 +270,7 @@ class 配置页(QWidget):
         进程选择布局.addWidget(self._进程选择)
         
         # 刷新按钮
-        self._刷新进程按钮 = QPushButton("🔄")
+        self._刷新进程按钮 = QPushButton("刷新")
         self._刷新进程按钮.setFixedSize(32, 布局常量.表单控件高度)
         self._刷新进程按钮.setToolTip("刷新窗口列表")
         self._刷新进程按钮.setStyleSheet(f"""
@@ -289,7 +289,7 @@ class 配置页(QWidget):
         进程选择布局.addWidget(self._刷新进程按钮)
         
         # 应用按钮
-        self._应用窗口按钮 = QPushButton("📍 应用")
+        self._应用窗口按钮 = QPushButton("应用")
         self._应用窗口按钮.setFixedSize(60, 布局常量.表单控件高度)
         self._应用窗口按钮.setToolTip("将选中窗口的位置应用到配置")
         self._应用窗口按钮.setStyleSheet(f"""
@@ -315,7 +315,7 @@ class 配置页(QWidget):
         self._刷新窗口列表()
         
         # 窗口区域设置分组
-        分组标题1 = QLabel("📐 窗口区域")
+        分组标题1 = QLabel("窗口区域")
         分组标题1.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -361,7 +361,7 @@ class 配置页(QWidget):
         表单布局.addRow("窗口下边界:", self._创建带说明的控件(下边界, "游戏窗口底部结束位置"))
         
         # 分辨率设置分组
-        分组标题2 = QLabel("🖼️ 分辨率设置")
+        分组标题2 = QLabel("分辨率设置")
         分组标题2.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -472,11 +472,11 @@ class 配置页(QWidget):
         当前选择 = self._进程选择.currentText()
         
         if not 当前选择 or 当前选择.startswith("("):
-            QMessageBox.warning(self, "提示", "请先选择一个有效的游戏窗口")
+            提示对话框.警告提示(self, "提示", "请先选择一个有效的游戏窗口")
             return
         
         if 当前选择 not in self._窗口信息缓存:
-            QMessageBox.warning(self, "提示", "窗口信息已失效，请刷新列表后重试")
+            提示对话框.警告提示(self, "提示", "窗口信息已失效，请刷新列表后重试")
             return
         
         窗口信息 = self._窗口信息缓存[当前选择]
@@ -491,7 +491,7 @@ class 配置页(QWidget):
         self._配置控件["游戏宽度"].setValue(窗口信息['宽度'])
         self._配置控件["游戏高度"].setValue(窗口信息['高度'])
         
-        QMessageBox.information(
+        提示对话框.信息提示(
             self, "成功", 
             f"已应用窗口 \"{窗口信息['标题'][:20]}...\" 的位置\n"
             f"区域: ({窗口信息['左']}, {窗口信息['上']}, {窗口信息['右']}, {窗口信息['下']})\n"
@@ -505,7 +505,7 @@ class 配置页(QWidget):
         表单布局.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
         # 输入尺寸分组
-        分组标题1 = QLabel("📏 输入尺寸")
+        分组标题1 = QLabel("输入尺寸")
         分组标题1.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -535,7 +535,7 @@ class 配置页(QWidget):
         表单布局.addRow("输入高度:", self._创建带说明的控件(输入高度, "模型输入图像的高度，影响处理速度"))
         
         # 路径设置分组
-        分组标题2 = QLabel("📂 路径设置")
+        分组标题2 = QLabel("路径设置")
         分组标题2.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -569,7 +569,7 @@ class 配置页(QWidget):
         表单布局.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
         # 训练设置分组
-        分组标题1 = QLabel("⚙️ 训练设置")
+        分组标题1 = QLabel("训练设置")
         分组标题1.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -623,7 +623,7 @@ class 配置页(QWidget):
         表单布局.addRow("训练轮数:", self._创建带说明的控件(训练轮数, "模型训练的总轮数"))
         
         # 数据设置分组
-        分组标题2 = QLabel("📊 数据设置")
+        分组标题2 = QLabel("数据设置")
         分组标题2.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -668,7 +668,7 @@ class 配置页(QWidget):
         表单布局.setLabelAlignment(Qt.AlignRight | Qt.AlignVCenter)
         
         # YOLO检测器分组
-        分组标题1 = QLabel("🎯 YOLO检测器")
+        分组标题1 = QLabel("YOLO检测器")
         分组标题1.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -718,7 +718,7 @@ class 配置页(QWidget):
         表单布局.addRow("检测间隔:", self._创建带说明的控件(yolo间隔, "每N帧执行一次检测，值越大性能越好"))
         
         # 状态识别器分组
-        分组标题2 = QLabel("🔍 状态识别器")
+        分组标题2 = QLabel("状态识别器")
         分组标题2.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -734,7 +734,7 @@ class 配置页(QWidget):
         表单布局.addRow("", self._创建带说明的控件(状态识别启用, "启用后可识别当前游戏状态（战斗/对话等）"))
         
         # 决策引擎分组
-        分组标题3 = QLabel("🧠 决策引擎")
+        分组标题3 = QLabel("决策引擎")
         分组标题3.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -783,7 +783,7 @@ class 配置页(QWidget):
         表单布局.addRow("规则权重:", self._创建带说明的控件(规则权重容器, "混合模式下规则的权重（模型权重=1-规则权重）"))
         
         # 性能配置分组
-        分组标题4 = QLabel("⚡ 性能配置")
+        分组标题4 = QLabel("性能配置")
         分组标题4.setStyleSheet(f"""
             font-size: {布局常量.卡片标题字号}px;
             font-weight: bold;
@@ -819,7 +819,7 @@ class 配置页(QWidget):
         按钮布局.addStretch()
         
         # 重置按钮
-        self._重置按钮 = QPushButton("🔄 重置默认")
+        self._重置按钮 = QPushButton("重置默认")
         self._重置按钮.setFixedSize(100, 布局常量.按钮高度)
         self._重置按钮.setStyleSheet(f"""
             QPushButton {{
@@ -838,7 +838,7 @@ class 配置页(QWidget):
         按钮布局.addWidget(self._重置按钮)
         
         # 保存按钮
-        self._保存按钮 = QPushButton("💾 保存配置")
+        self._保存按钮 = QPushButton("保存配置")
         self._保存按钮.setFixedSize(100, 布局常量.按钮高度)
         self._保存按钮.setStyleSheet(f"""
             QPushButton {{
@@ -919,14 +919,14 @@ class 配置页(QWidget):
             self._配置管理器.switch_profile(档案名称)
             self.档案已切换.emit(档案名称)
         except FileNotFoundError:
-            QMessageBox.warning(self, "切换失败", f"档案 '{档案名称}' 不存在")
+            提示对话框.警告提示(self, "切换失败", f"档案 '{档案名称}' 不存在")
         except Exception as e:
-            QMessageBox.warning(self, "切换失败", f"切换档案时发生错误:\n{str(e)}")
+            提示对话框.警告提示(self, "切换失败", f"切换档案时发生错误:\n{str(e)}")
     
     def _新建档案(self):
         """新建配置档案"""
         if not self._配置管理器:
-            QMessageBox.warning(self, "错误", "配置管理器未初始化")
+            提示对话框.警告提示(self, "错误", "配置管理器未初始化")
             return
         
         # 获取档案名称
@@ -959,16 +959,16 @@ class 配置页(QWidget):
             # 选择新档案
             self._档案选择.setCurrentText(档案名称.strip())
             
-            QMessageBox.information(self, "成功", f"档案 '{档案名称}' 创建成功！")
+            提示对话框.信息提示(self, "成功", f"档案 '{档案名称}' 创建成功！")
         except FileExistsError:
-            QMessageBox.warning(self, "创建失败", f"档案 '{档案名称}' 已存在")
+            提示对话框.警告提示(self, "创建失败", f"档案 '{档案名称}' 已存在")
         except Exception as e:
-            QMessageBox.warning(self, "创建失败", f"创建档案时发生错误:\n{str(e)}")
+            提示对话框.警告提示(self, "创建失败", f"创建档案时发生错误:\n{str(e)}")
     
     def _导入档案(self):
         """导入配置档案 (需求 6.5)"""
         if not self._配置管理器:
-            QMessageBox.warning(self, "错误", "配置管理器未初始化")
+            提示对话框.警告提示(self, "错误", "配置管理器未初始化")
             return
         
         # 选择文件
@@ -1003,23 +1003,23 @@ class 配置页(QWidget):
             # 选择导入的档案
             self._档案选择.setCurrentText(导入的档案.name)
             
-            QMessageBox.information(self, "成功", f"档案 '{导入的档案.name}' 导入成功！")
+            提示对话框.信息提示(self, "成功", f"档案 '{导入的档案.name}' 导入成功！")
         except FileExistsError:
-            QMessageBox.warning(self, "导入失败", "同名档案已存在，请使用其他名称")
+            提示对话框.警告提示(self, "导入失败", "同名档案已存在，请使用其他名称")
         except ValueError as e:
-            QMessageBox.warning(self, "导入失败", f"文件格式无效:\n{str(e)}")
+            提示对话框.警告提示(self, "导入失败", f"文件格式无效:\n{str(e)}")
         except Exception as e:
-            QMessageBox.warning(self, "导入失败", f"导入档案时发生错误:\n{str(e)}")
+            提示对话框.警告提示(self, "导入失败", f"导入档案时发生错误:\n{str(e)}")
     
     def _导出档案(self):
         """导出配置档案 (需求 6.3)"""
         if not self._配置管理器:
-            QMessageBox.warning(self, "错误", "配置管理器未初始化")
+            提示对话框.警告提示(self, "错误", "配置管理器未初始化")
             return
         
         当前档案名 = self._档案选择.currentText()
         if not 当前档案名 or 当前档案名 == "(无档案)":
-            QMessageBox.warning(self, "导出失败", "请先选择要导出的档案")
+            提示对话框.警告提示(self, "导出失败", "请先选择要导出的档案")
             return
         
         # 选择保存路径
@@ -1033,42 +1033,41 @@ class 配置页(QWidget):
         
         try:
             self._配置管理器.export_profile(当前档案名, 文件路径)
-            QMessageBox.information(self, "成功", f"档案已导出到:\n{文件路径}")
+            提示对话框.信息提示(self, "成功", f"档案已导出到:\n{文件路径}")
         except FileNotFoundError:
-            QMessageBox.warning(self, "导出失败", f"档案 '{当前档案名}' 不存在")
+            提示对话框.警告提示(self, "导出失败", f"档案 '{当前档案名}' 不存在")
         except Exception as e:
-            QMessageBox.warning(self, "导出失败", f"导出档案时发生错误:\n{str(e)}")
+            提示对话框.警告提示(self, "导出失败", f"导出档案时发生错误:\n{str(e)}")
     
     def _删除档案(self):
         """删除配置档案"""
         if not self._配置管理器:
-            QMessageBox.warning(self, "错误", "配置管理器未初始化")
+            提示对话框.警告提示(self, "错误", "配置管理器未初始化")
             return
         
         当前档案名 = self._档案选择.currentText()
         if not 当前档案名 or 当前档案名 == "(无档案)":
-            QMessageBox.warning(self, "删除失败", "请先选择要删除的档案")
+            提示对话框.警告提示(self, "删除失败", "请先选择要删除的档案")
             return
         
         # 确认删除
-        回复 = QMessageBox.question(
+        回复 = 确认对话框.询问(
             self, "确认删除",
             f"确定要删除档案 '{当前档案名}' 吗？\n此操作不可撤销！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            "删除", "取消"
         )
         
-        if 回复 != QMessageBox.Yes:
+        if 回复 != 确认对话框.确认:
             return
         
         try:
             self._配置管理器.delete_profile(当前档案名)
             self._刷新档案列表()
-            QMessageBox.information(self, "成功", f"档案 '{当前档案名}' 已删除")
+            提示对话框.信息提示(self, "成功", f"档案 '{当前档案名}' 已删除")
         except FileNotFoundError:
-            QMessageBox.warning(self, "删除失败", f"档案 '{当前档案名}' 不存在")
+            提示对话框.警告提示(self, "删除失败", f"档案 '{当前档案名}' 不存在")
         except Exception as e:
-            QMessageBox.warning(self, "删除失败", f"删除档案时发生错误:\n{str(e)}")
+            提示对话框.警告提示(self, "删除失败", f"删除档案时发生错误:\n{str(e)}")
 
     # ==================== 配置加载和保存方法 ====================
     
@@ -1272,11 +1271,10 @@ class 配置页(QWidget):
         
         if not 有效:
             错误信息 = "\n".join(f"• {错误}" for 错误 in 错误列表)
-            QMessageBox.warning(
+            提示对话框.警告提示(
                 self,
                 "配置验证失败",
-                f"以下配置项存在问题:\n\n{错误信息}",
-                QMessageBox.Ok
+                f"以下配置项存在问题:\n\n{错误信息}"
             )
             return
         
@@ -1303,32 +1301,29 @@ class 配置页(QWidget):
             # 发送信号
             self.配置已保存.emit()
             
-            QMessageBox.information(
+            提示对话框.信息提示(
                 self,
                 "保存成功",
-                "配置已成功保存！\n\n部分配置可能需要重启程序后生效。",
-                QMessageBox.Ok
+                "配置已成功保存！\n\n部分配置可能需要重启程序后生效。"
             )
             
         except Exception as e:
-            QMessageBox.critical(
+            提示对话框.错误提示(
                 self,
                 "保存失败",
-                f"保存配置时发生错误:\n\n{str(e)}",
-                QMessageBox.Ok
+                f"保存配置时发生错误:\n\n{str(e)}"
             )
     
     def _重置配置(self):
         """重置配置到原始值"""
-        回复 = QMessageBox.question(
+        回复 = 确认对话框.询问(
             self,
             "确认重置",
             "确定要重置所有配置到上次保存的状态吗？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            "重置", "取消"
         )
         
-        if 回复 == QMessageBox.Yes:
+        if 回复 == 确认对话框.确认:
             self._恢复原始值()
             self.配置已重置.emit()
     

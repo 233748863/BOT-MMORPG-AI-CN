@@ -549,3 +549,317 @@ class 页面切换管理器:
     def 当前页面(self) -> Optional[QWidget]:
         """获取当前显示的页面"""
         return self._当前页面
+
+
+class 确认对话框(QFrame):
+    """
+    自定义确认对话框
+    
+    替代 QMessageBox.question，解决按钮文字显示问题。
+    使用自定义样式确保中文和 emoji 正常显示。
+    """
+    
+    确认 = 1
+    取消 = 0
+    
+    def __init__(
+        self,
+        标题: str,
+        内容: str,
+        父窗口: QWidget = None,
+        确认文字: str = "确定",
+        取消文字: str = "取消"
+    ):
+        """
+        初始化确认对话框
+        
+        参数:
+            标题: 对话框标题
+            内容: 对话框内容
+            父窗口: 父窗口
+            确认文字: 确认按钮文字
+            取消文字: 取消按钮文字
+        """
+        super().__init__(父窗口)
+        self._标题 = 标题
+        self._内容 = 内容
+        self._确认文字 = 确认文字
+        self._取消文字 = 取消文字
+        self._结果 = self.取消
+        
+    @staticmethod
+    def 询问(
+        父窗口: QWidget,
+        标题: str,
+        内容: str,
+        确认文字: str = "确定",
+        取消文字: str = "取消"
+    ) -> int:
+        """
+        显示确认对话框并返回结果
+        
+        参数:
+            父窗口: 父窗口
+            标题: 对话框标题
+            内容: 对话框内容
+            确认文字: 确认按钮文字
+            取消文字: 取消按钮文字
+            
+        返回:
+            确认对话框.确认 或 确认对话框.取消
+        """
+        from PySide6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        )
+        
+        对话框 = QDialog(父窗口)
+        对话框.setWindowTitle(标题)
+        对话框.setFixedWidth(380)
+        对话框.setStyleSheet(f"""
+            QDialog {{
+                background-color: {颜色.卡片背景};
+            }}
+            QLabel {{
+                color: {颜色.文字};
+                font-family: "Microsoft YaHei UI", "Segoe UI Emoji", sans-serif;
+                font-size: 13px;
+                background: transparent;
+            }}
+            QLabel#标题 {{
+                color: {颜色.标题};
+                font-size: 14px;
+                font-weight: bold;
+            }}
+        """)
+        
+        布局 = QVBoxLayout(对话框)
+        布局.setContentsMargins(20, 16, 20, 16)
+        布局.setSpacing(8)
+        
+        # 标题
+        标题标签 = QLabel(标题)
+        标题标签.setObjectName("标题")
+        布局.addWidget(标题标签)
+        
+        # 内容
+        内容标签 = QLabel(内容)
+        内容标签.setWordWrap(True)
+        布局.addWidget(内容标签)
+        
+        布局.addSpacing(4)
+        
+        # 按钮区域
+        按钮容器 = QWidget()
+        按钮容器.setStyleSheet("background: transparent;")  # 确保按钮行不显示意外的背景色
+        按钮布局 = QHBoxLayout(按钮容器)
+        按钮布局.setContentsMargins(0, 0, 0, 0)
+        按钮布局.setSpacing(8)
+        按钮布局.addStretch()
+        
+        取消按钮 = QPushButton(取消文字)
+        取消按钮.setFixedSize(72, 30)
+        取消按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.卡片背景};
+                color: {颜色.文字};
+                border: 1px solid {颜色.边框};
+                border-radius: 4px;
+                font-family: "Microsoft YaHei UI", sans-serif;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {颜色.悬停背景};
+            }}
+        """)
+        取消按钮.clicked.connect(对话框.reject)
+        按钮布局.addWidget(取消按钮)
+        
+        确认按钮 = QPushButton(确认文字)
+        确认按钮.setFixedSize(72, 30)
+        确认按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.主色};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-family: "Microsoft YaHei UI", sans-serif;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: {颜色.主色悬停};
+            }}
+        """)
+        确认按钮.clicked.connect(对话框.accept)
+        按钮布局.addWidget(确认按钮)
+        
+        布局.addWidget(按钮容器)
+        
+        结果 = 对话框.exec()
+        return 确认对话框.确认 if 结果 == QDialog.Accepted else 确认对话框.取消
+
+
+class 提示对话框:
+    """
+    自定义提示对话框
+    
+    替代 QMessageBox.information/warning/critical，解决按钮文字显示问题。
+    使用自定义样式确保中文和 emoji 正常显示。
+    """
+    
+    # 对话框类型
+    信息 = "info"
+    警告 = "warning"
+    错误 = "error"
+    
+    @staticmethod
+    def _显示(
+        父窗口: QWidget,
+        标题: str,
+        内容: str,
+        类型: str = "info",
+        按钮文字: str = "确定"
+    ) -> None:
+        """
+        显示提示对话框
+        
+        参数:
+            父窗口: 父窗口
+            标题: 对话框标题
+            内容: 对话框内容
+            类型: 对话框类型 (info/warning/error)
+            按钮文字: 按钮文字
+        """
+        from PySide6.QtWidgets import (
+            QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+        )
+        
+        # 根据类型选择图标和颜色
+        图标映射 = {
+            "info": ("ℹ️", 颜色.主色),
+            "warning": ("⚠️", 颜色.警告),
+            "error": ("❌", 颜色.错误),
+        }
+        图标, 强调色 = 图标映射.get(类型, ("ℹ️", 颜色.主色))
+        
+        对话框 = QDialog(父窗口)
+        对话框.setWindowTitle(标题)
+        对话框.setFixedWidth(380)
+        对话框.setStyleSheet(f"""
+            QDialog {{
+                background-color: {颜色.卡片背景};
+            }}
+            QLabel {{
+                color: {颜色.文字};
+                font-family: "Microsoft YaHei UI", "Segoe UI Emoji", sans-serif;
+                font-size: 13px;
+                background: transparent;
+            }}
+            QLabel#图标 {{
+                font-size: 20px;
+            }}
+            QLabel#标题 {{
+                color: {颜色.标题};
+                font-size: 14px;
+                font-weight: bold;
+            }}
+        """)
+        
+        布局 = QVBoxLayout(对话框)
+        布局.setContentsMargins(20, 16, 20, 16)
+        布局.setSpacing(8)
+        
+        # 标题行（图标 + 标题）
+        标题容器 = QWidget()
+        标题容器.setStyleSheet("background: transparent;")  # 确保标题行不显示意外的背景色
+        标题布局 = QHBoxLayout(标题容器)
+        标题布局.setContentsMargins(0, 0, 0, 0)
+        标题布局.setSpacing(6)
+        
+        图标标签 = QLabel(图标)
+        图标标签.setObjectName("图标")
+        标题布局.addWidget(图标标签)
+        
+        标题标签 = QLabel(标题)
+        标题标签.setObjectName("标题")
+        标题布局.addWidget(标题标签)
+        标题布局.addStretch()
+        
+        布局.addWidget(标题容器)
+        
+        # 内容
+        内容标签 = QLabel(内容)
+        内容标签.setWordWrap(True)
+        布局.addWidget(内容标签)
+        
+        布局.addSpacing(4)
+        
+        # 按钮区域
+        按钮容器 = QWidget()
+        按钮容器.setStyleSheet("background: transparent;")  # 确保按钮行不显示意外的背景色
+        按钮布局 = QHBoxLayout(按钮容器)
+        按钮布局.setContentsMargins(0, 0, 0, 0)
+        按钮布局.addStretch()
+        
+        确定按钮 = QPushButton(按钮文字)
+        确定按钮.setFixedSize(72, 30)
+        确定按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {强调色};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-family: "Microsoft YaHei UI", sans-serif;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                opacity: 0.9;
+            }}
+        """)
+        确定按钮.clicked.connect(对话框.accept)
+        按钮布局.addWidget(确定按钮)
+        
+        布局.addWidget(按钮容器)
+        
+        对话框.exec()
+    
+    @staticmethod
+    def 信息提示(
+        父窗口: QWidget,
+        标题: str,
+        内容: str,
+        按钮文字: str = "确定"
+    ) -> None:
+        """
+        显示信息提示对话框
+        
+        替代 QMessageBox.information
+        """
+        提示对话框._显示(父窗口, 标题, 内容, "info", 按钮文字)
+    
+    @staticmethod
+    def 警告提示(
+        父窗口: QWidget,
+        标题: str,
+        内容: str,
+        按钮文字: str = "确定"
+    ) -> None:
+        """
+        显示警告提示对话框
+        
+        替代 QMessageBox.warning
+        """
+        提示对话框._显示(父窗口, 标题, 内容, "warning", 按钮文字)
+    
+    @staticmethod
+    def 错误提示(
+        父窗口: QWidget,
+        标题: str,
+        内容: str,
+        按钮文字: str = "确定"
+    ) -> None:
+        """
+        显示错误提示对话框
+        
+        替代 QMessageBox.critical
+        """
+        提示对话框._显示(父窗口, 标题, 内容, "error", 按钮文字)

@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from 界面.样式.主题 import 颜色
 from 界面.样式.布局常量 import 布局常量
+from 界面.组件.通用组件 import 确认对话框, 提示对话框
 
 
 @dataclass
@@ -125,7 +126,7 @@ class 窗口预览控件(QWidget):
         painter.end()
 
 
-class 配置界面(QDialog):
+class 配置界面(QWidget):
     """图形化配置编辑界面
     
     提供完整的配置管理功能:
@@ -134,6 +135,10 @@ class 配置界面(QDialog):
     - 档案管理
     - 窗口区域预览
     
+    支持两种模式:
+    - 独立模式: 作为独立窗口运行 (嵌入模式=False)
+    - 嵌入模式: 作为页面嵌入主界面 (嵌入模式=True)
+    
     需求: 1.1, 1.2, 1.3, 1.4, 2.1, 2.2, 2.3, 2.4
     """
     
@@ -141,8 +146,11 @@ class 配置界面(QDialog):
     配置已保存 = Signal(dict)
     配置已重置 = Signal()
     
-    def __init__(self, 配置管理器=None, parent=None):
+    def __init__(self, 配置管理器=None, parent=None, 嵌入模式=False):
         super().__init__(parent)
+        
+        # 嵌入模式标志
+        self._嵌入模式 = 嵌入模式
         
         # 初始化配置管理器
         self._配置管理器 = 配置管理器
@@ -174,13 +182,18 @@ class 配置界面(QDialog):
         
         需求: 1.1, 1.2
         """
-        self.setWindowTitle("⚙️ 配置管理")
-        self.setMinimumSize(700, 550)
-        self.resize(750, 600)
+        # 嵌入模式下不设置窗口标题和尺寸
+        if not self._嵌入模式:
+            self.setWindowTitle("⚙️ 配置管理")
+            self.setMinimumSize(700, 550)
+            self.resize(750, 600)
+        else:
+            # 嵌入模式下使用扩展尺寸策略
+            self.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        # 应用样式
+        # 应用样式 - 使用 QWidget 而非 QDialog
         self.setStyleSheet(f"""
-            QDialog {{
+            QWidget {{
                 background-color: {颜色.背景};
             }}
             QLabel {{
@@ -267,7 +280,7 @@ class 配置界面(QDialog):
     def _创建窗口设置标签页(self) -> QWidget:
         """创建窗口设置标签页
         
-        需求: 1.2, 2.1, 5.1
+        需求: 1.1, 1.2, 1.3, 2.1, 5.1
         """
         布局 = QVBoxLayout()
         布局.setSpacing(12)
@@ -297,6 +310,25 @@ class 配置界面(QDialog):
         窗口组布局.addWidget(QLabel("高度:"), 1, 2)
         窗口高度 = self._创建数字输入框("窗口设置", "窗口高度", 1080, 100, 4320)
         窗口组布局.addWidget(窗口高度, 1, 3)
+        
+        # 选择窗口按钮 (需求 1.1, 1.2, 1.3)
+        选择窗口按钮 = QPushButton("🎯 选择窗口")
+        选择窗口按钮.setFixedSize(100, 28)
+        选择窗口按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.成功};
+                color: white;
+                border: none;
+                border-radius: 4px;
+                font-size: 12px;
+            }}
+            QPushButton:hover {{
+                background-color: #059669;
+            }}
+        """)
+        选择窗口按钮.setToolTip("从运行中的窗口列表中选择目标窗口")
+        选择窗口按钮.clicked.connect(self._打开窗口选择对话框)
+        窗口组布局.addWidget(选择窗口按钮, 2, 0, 1, 2)
         
         # 分区重置按钮 (需求 5.1)
         重置按钮 = self._创建分区重置按钮("窗口设置")
@@ -506,23 +538,24 @@ class 配置界面(QDialog):
         self._重置按钮.clicked.connect(self._重置配置)
         按钮布局.addWidget(self._重置按钮)
         
-        # 取消按钮
-        self._取消按钮 = QPushButton("取消")
-        self._取消按钮.setFixedSize(80, 32)
-        self._取消按钮.setStyleSheet(f"""
-            QPushButton {{
-                background-color: {颜色.卡片背景};
-                color: {颜色.文字};
-                border: 1px solid {颜色.边框};
-                border-radius: 6px;
-                font-size: 12px;
-            }}
-            QPushButton:hover {{
-                background-color: {颜色.悬停背景};
-            }}
-        """)
-        self._取消按钮.clicked.connect(self._关闭窗口)
-        按钮布局.addWidget(self._取消按钮)
+        # 取消按钮 - 仅在非嵌入模式下显示
+        if not self._嵌入模式:
+            self._取消按钮 = QPushButton("取消")
+            self._取消按钮.setFixedSize(80, 32)
+            self._取消按钮.setStyleSheet(f"""
+                QPushButton {{
+                    background-color: {颜色.卡片背景};
+                    color: {颜色.文字};
+                    border: 1px solid {颜色.边框};
+                    border-radius: 6px;
+                    font-size: 12px;
+                }}
+                QPushButton:hover {{
+                    background-color: {颜色.悬停背景};
+                }}
+            """)
+            self._取消按钮.clicked.connect(self._关闭窗口)
+            按钮布局.addWidget(self._取消按钮)
         
         # 保存按钮
         self._保存按钮 = QPushButton("💾 保存")
@@ -586,14 +619,13 @@ class 配置界面(QDialog):
             分区名: 要重置的分区名称
         """
         # 确认对话框
-        回复 = QMessageBox.question(
+        回复 = 确认对话框.询问(
             self, "确认重置",
             f"确定要将「{分区名}」的所有参数重置为默认值吗？",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            "重置", "取消"
         )
         
-        if 回复 != QMessageBox.Yes:
+        if 回复 != 确认对话框.确认:
             return
         
         # 获取分区默认值
@@ -619,7 +651,7 @@ class 配置界面(QDialog):
                     if 分区名 == "窗口设置":
                         self.更新预览()
             except Exception as e:
-                QMessageBox.warning(self, "重置失败", f"重置分区失败: {e}")
+                提示对话框.警告提示(self, "重置失败", f"重置分区失败: {e}")
         else:
             # 没有配置管理器时，使用硬编码的默认值
             self._重置分区到硬编码默认值(分区名)
@@ -1111,7 +1143,7 @@ class 配置界面(QDialog):
         
         if not 有效:
             错误信息 = "\n".join(f"• {错误}" for 错误 in 错误列表)
-            QMessageBox.warning(
+            提示对话框.警告提示(
                 self, "验证失败",
                 f"以下配置项存在问题:\n\n{错误信息}"
             )
@@ -1128,7 +1160,7 @@ class 配置界面(QDialog):
         self._状态标签.setText("✓ 已保存")
         self._状态标签.setStyleSheet(f"color: {颜色.成功};")
         
-        QMessageBox.information(self, "成功", "配置已保存！")
+        提示对话框.信息提示(self, "成功", "配置已保存！")
     
     def _重置配置(self):
         """重置所有配置到默认值
@@ -1136,7 +1168,7 @@ class 配置界面(QDialog):
         需求: 5.2, 5.3
         """
         # 重置前确认 (需求 5.3)
-        回复 = QMessageBox.question(
+        回复 = 确认对话框.询问(
             self, "确认全部重置",
             "⚠️ 确定要将所有配置重置为默认值吗？\n\n"
             "此操作将重置以下分区的所有参数:\n"
@@ -1145,11 +1177,10 @@ class 配置界面(QDialog):
             "• 训练设置\n"
             "• 运行设置\n\n"
             "此操作不可撤销！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            "重置", "取消"
         )
         
-        if 回复 != QMessageBox.Yes:
+        if 回复 != 确认对话框.确认:
             return
         
         # 执行全部重置
@@ -1186,21 +1217,34 @@ class 配置界面(QDialog):
             self.配置已重置.emit()
             
         except Exception as e:
-            QMessageBox.warning(self, "重置失败", f"全部重置失败: {e}")
+            提示对话框.警告提示(self, "重置失败", f"全部重置失败: {e}")
     
     def _关闭窗口(self):
         """关闭窗口
         
         需求: 3.4 - 关闭前提示保存未保存的更改
+        
+        注意: 仅在非嵌入模式下执行对话框关闭逻辑
         """
+        # 嵌入模式下不执行关闭逻辑（由主窗口管理）
+        if self._嵌入模式:
+            return
+        
         if self._处理未保存更改():
-            self.reject()
+            self.close()
     
     def closeEvent(self, event):
         """窗口关闭事件
         
         需求: 3.4 - 关闭前提示保存未保存的更改
+        
+        注意: 仅在非嵌入模式下处理关闭事件
         """
+        # 嵌入模式下直接接受关闭事件（由主窗口管理）
+        if self._嵌入模式:
+            event.accept()
+            return
+        
         if self._处理未保存更改():
             event.accept()
         else:
@@ -1218,27 +1262,123 @@ class 配置界面(QDialog):
         if not self._已修改:
             return True
         
-        # 创建自定义消息框，提供三个选项
-        消息框 = QMessageBox(self)
-        消息框.setWindowTitle("未保存的更改")
-        消息框.setText("配置已修改但尚未保存。")
-        消息框.setInformativeText("是否要在关闭前保存更改？")
-        消息框.setIcon(QMessageBox.Warning)
+        # 使用自定义三按钮对话框
+        from PySide6.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
         
-        # 添加三个按钮
-        保存按钮 = 消息框.addButton("保存", QMessageBox.AcceptRole)
-        不保存按钮 = 消息框.addButton("不保存", QMessageBox.DestructiveRole)
-        取消按钮 = 消息框.addButton("取消", QMessageBox.RejectRole)
+        对话框 = QDialog(self)
+        对话框.setWindowTitle("未保存的更改")
+        对话框.setFixedWidth(400)
+        对话框.setStyleSheet(f"""
+            QDialog {{
+                background-color: {颜色.卡片背景};
+            }}
+            QLabel {{
+                color: {颜色.文字};
+                font-family: "Microsoft YaHei UI", "Segoe UI Emoji", sans-serif;
+                font-size: 13px;
+            }}
+            QLabel#标题 {{
+                color: {颜色.标题};
+                font-size: 15px;
+                font-weight: bold;
+            }}
+        """)
         
-        消息框.setDefaultButton(保存按钮)
-        消息框.exec()
+        布局 = QVBoxLayout(对话框)
+        布局.setContentsMargins(20, 20, 20, 20)
+        布局.setSpacing(16)
         
-        点击的按钮 = 消息框.clickedButton()
+        # 标题
+        标题标签 = QLabel("⚠️ 未保存的更改")
+        标题标签.setObjectName("标题")
+        布局.addWidget(标题标签)
         
-        if 点击的按钮 == 保存按钮:
+        # 内容
+        内容标签 = QLabel("配置已修改但尚未保存。\n是否要在关闭前保存更改？")
+        内容标签.setWordWrap(True)
+        布局.addWidget(内容标签)
+        
+        # 按钮区域
+        按钮容器 = QWidget()
+        按钮布局 = QHBoxLayout(按钮容器)
+        按钮布局.setContentsMargins(0, 0, 0, 0)
+        按钮布局.setSpacing(12)
+        按钮布局.addStretch()
+        
+        # 结果变量
+        结果 = {"选择": "取消"}
+        
+        取消按钮 = QPushButton("取消")
+        取消按钮.setFixedSize(80, 32)
+        取消按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.卡片背景};
+                color: {颜色.文字};
+                border: 1px solid {颜色.边框};
+                border-radius: 6px;
+                font-family: "Microsoft YaHei UI", "Segoe UI Emoji", sans-serif;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background-color: {颜色.悬停背景};
+            }}
+        """)
+        def 点击取消():
+            结果["选择"] = "取消"
+            对话框.reject()
+        取消按钮.clicked.connect(点击取消)
+        按钮布局.addWidget(取消按钮)
+        
+        不保存按钮 = QPushButton("不保存")
+        不保存按钮.setFixedSize(80, 32)
+        不保存按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.错误};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-family: "Microsoft YaHei UI", "Segoe UI Emoji", sans-serif;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                opacity: 0.9;
+            }}
+        """)
+        def 点击不保存():
+            结果["选择"] = "不保存"
+            对话框.accept()
+        不保存按钮.clicked.connect(点击不保存)
+        按钮布局.addWidget(不保存按钮)
+        
+        保存按钮 = QPushButton("保存")
+        保存按钮.setFixedSize(80, 32)
+        保存按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: {颜色.主色};
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-family: "Microsoft YaHei UI", "Segoe UI Emoji", sans-serif;
+                font-size: 13px;
+            }}
+            QPushButton:hover {{
+                background-color: {颜色.主色悬停};
+            }}
+        """)
+        def 点击保存():
+            结果["选择"] = "保存"
+            对话框.accept()
+        保存按钮.clicked.connect(点击保存)
+        按钮布局.addWidget(保存按钮)
+        
+        布局.addWidget(按钮容器)
+        
+        对话框.exec()
+        
+        if 结果["选择"] == "保存":
             # 尝试保存配置
             return self._尝试保存并关闭()
-        elif 点击的按钮 == 不保存按钮:
+        elif 结果["选择"] == "不保存":
             # 放弃更改，直接关闭
             self._已修改 = False
             return True
@@ -1260,14 +1400,13 @@ class 配置界面(QDialog):
         
         if not 有效:
             错误信息 = "\n".join(f"• {错误}" for 错误 in 错误列表)
-            回复 = QMessageBox.warning(
+            回复 = 确认对话框.询问(
                 self, "验证失败",
                 f"以下配置项存在问题:\n\n{错误信息}\n\n"
                 "是否仍要关闭（不保存更改）？",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.No
+                "关闭", "取消"
             )
-            if 回复 == QMessageBox.Yes:
+            if 回复 == 确认对话框.确认:
                 self._已修改 = False
                 return True
             return False
@@ -1331,20 +1470,117 @@ class 配置界面(QDialog):
                 )
         except Exception:
             pass
+    
+    def _打开窗口选择对话框(self):
+        """打开窗口选择对话框
+        
+        需求: 1.2 - 点击选择窗口按钮打开窗口选择对话框
+        """
+        try:
+            from 界面.组件.窗口选择器 import 窗口选择对话框
+            from 核心.窗口检测 import 窗口查找器
+            
+            # 创建窗口查找器和对话框
+            查找器 = 窗口查找器()
+            对话框 = 窗口选择对话框(查找器, self)
+            
+            # 连接信号
+            对话框.窗口已选择.connect(self._处理窗口选择)
+            
+            # 显示对话框
+            对话框.exec()
+            
+        except Exception as e:
+            提示对话框.警告提示(self, "错误", f"打开窗口选择对话框失败: {e}")
+    
+    def _处理窗口选择(self, 句柄: int):
+        """处理窗口选择信号
+        
+        需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
+        
+        参数:
+            句柄: 选中的窗口句柄
+        """
+        try:
+            from 核心.窗口检测 import 窗口查找器
+            
+            查找器 = 窗口查找器()
+            窗口信息 = 查找器.获取窗口信息(句柄)
+            
+            if 窗口信息:
+                self._填充窗口参数(窗口信息)
+            else:
+                提示对话框.警告提示(self, "错误", "无法获取窗口信息，窗口可能已关闭")
+                
+        except Exception as e:
+            提示对话框.警告提示(self, "错误", f"处理窗口选择失败: {e}")
+    
+    def _填充窗口参数(self, 窗口信息):
+        """填充窗口参数到界面
+        
+        需求: 5.1, 5.2, 5.3, 5.4, 5.5, 5.6
+        
+        参数:
+            窗口信息: 窗口信息对象，包含位置和大小属性
+        """
+        try:
+            # 设置窗口X坐标 (需求 5.1)
+            x信息 = self._控件字典.get("窗口设置.窗口X")
+            if x信息:
+                self._设置控件值(x信息.控件, 窗口信息.位置[0])
+            
+            # 设置窗口Y坐标 (需求 5.2)
+            y信息 = self._控件字典.get("窗口设置.窗口Y")
+            if y信息:
+                self._设置控件值(y信息.控件, 窗口信息.位置[1])
+            
+            # 设置窗口宽度 (需求 5.3)
+            宽度信息 = self._控件字典.get("窗口设置.窗口宽度")
+            if 宽度信息:
+                self._设置控件值(宽度信息.控件, 窗口信息.大小[0])
+            
+            # 设置窗口高度 (需求 5.4)
+            高度信息 = self._控件字典.get("窗口设置.窗口高度")
+            if 高度信息:
+                self._设置控件值(高度信息.控件, 窗口信息.大小[1])
+            
+            # 更新窗口预览 (需求 5.5)
+            self.更新预览()
+            
+            # 标记配置为已修改状态 (需求 5.6)
+            self._标记已修改()
+            
+            # 更新状态提示
+            self._状态标签.setText(f"✓ 已选择窗口: {窗口信息.标题[:20]}...")
+            self._状态标签.setStyleSheet(f"color: {颜色.成功};")
+            
+        except Exception as e:
+            提示对话框.警告提示(self, "错误", f"填充窗口参数失败: {e}")
 
 
 def 启动配置界面(配置管理器=None):
-    """启动配置界面
+    """启动配置界面（独立窗口模式）
     
     参数:
         配置管理器: 可选的配置管理器实例
     """
+    from 界面.样式.主题 import 应用全局字体
+    
     app = QApplication.instance()
+    新创建应用 = False
     if app is None:
         app = QApplication(sys.argv)
+        新创建应用 = True
+        # 应用支持 emoji 的全局字体（需求: 1.4, 3.2）
+        应用全局字体(app)
     
-    界面 = 配置界面(配置管理器)
-    界面.exec()
+    # 创建独立模式的配置界面（嵌入模式=False）
+    界面 = 配置界面(配置管理器, 嵌入模式=False)
+    界面.show()
+    
+    # 如果是新创建的应用，启动事件循环
+    if 新创建应用 and not QApplication.instance().closingDown():
+        app.exec()
 
 
 if __name__ == "__main__":

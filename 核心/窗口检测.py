@@ -13,6 +13,7 @@ import os
 import json
 import time
 import ctypes
+import ctypes.wintypes
 import threading
 from typing import Dict, List, Optional, Tuple, Callable, Any
 from dataclasses import dataclass, asdict

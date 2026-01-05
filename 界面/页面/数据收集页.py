@@ -402,8 +402,10 @@ class 画面预览(QFrame):
         # 预览标签
         self._预览标签 = QLabel()
         self._预览标签.setAlignment(Qt.AlignCenter)
+        # 使用主题色悬停背景，添加边框使其与卡片风格一致 (Requirements 3.1, 3.2, 3.3, 3.5)
         self._预览标签.setStyleSheet(f"""
-            background-color: #1E293B;
+            background-color: {颜色.悬停背景};
+            border: 1px solid {颜色.边框};
             border-radius: {self._布局常量.卡片圆角}px;
             color: {颜色.次要文字};
             font-size: {self._布局常量.正文字号}px;

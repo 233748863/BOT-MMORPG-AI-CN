@@ -50,7 +50,7 @@ class ToastNotification(QFrame):
             "文字色": "#1E40AF"
         },
         "success": {
-            "图标": "✅",
+            "图标": "[OK]",
             "背景色": "#ECFDF5",
             "边框色": "#10B981",
             "文字色": "#065F46"
@@ -62,7 +62,7 @@ class ToastNotification(QFrame):
             "文字色": "#92400E"
         },
         "error": {
-            "图标": "❌",
+            "图标": "[X]",
             "背景色": "#FEF2F2",
             "边框色": "#EF4444",
             "文字色": "#991B1B"

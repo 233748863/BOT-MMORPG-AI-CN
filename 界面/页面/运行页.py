@@ -45,7 +45,7 @@ class 运行模式卡片(Card):
     子模式改变 = Signal(str)
     
     def __init__(self, parent=None):
-        super().__init__("🎮 运行模式", "", parent)
+        super().__init__("运行模式", "", parent)
         self._初始化内容()
 
     def _初始化内容(self) -> None:
@@ -109,7 +109,7 @@ class 运行模式卡片(Card):
         按钮布局.setSpacing(布局常量.按钮间距)
         
         # 启动按钮
-        self._启动按钮 = QPushButton("🚀 启动")
+        self._启动按钮 = QPushButton("启动")
         self._启动按钮.setFixedSize(布局常量.按钮最小宽度 + 10, 布局常量.按钮高度)
         self._启动按钮.setCursor(Qt.PointingHandCursor)
         self._启动按钮.setStyleSheet(f"""
@@ -221,7 +221,7 @@ class 增强模块状态卡片(Card):
     """增强模块状态显示卡片组件 (Requirements 4.5)"""
     
     def __init__(self, parent=None):
-        super().__init__("🔧 增强模块状态", "", parent)
+        super().__init__("增强模块状态", "", parent)
         self._初始化内容()
     
     def _初始化内容(self) -> None:
@@ -290,37 +290,37 @@ class 增强模块状态卡片(Card):
     def 更新YOLO状态(self, 可用: bool) -> None:
         """更新YOLO检测器状态"""
         if 可用:
-            self._YOLO状态.setText("✅ 已加载")
+            self._YOLO状态.setText("[OK] 已加载")
             self._YOLO状态.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px;")
         else:
-            self._YOLO状态.setText("❌ 不可用")
+            self._YOLO状态.setText("[X] 不可用")
             self._YOLO状态.setStyleSheet(f"color: {颜色.错误}; font-size: {布局常量.次要文字字号}px;")
     
     def 更新状态识别状态(self, 可用: bool) -> None:
         """更新状态识别器状态"""
         if 可用:
-            self._状态识别状态.setText("✅ 已加载")
+            self._状态识别状态.setText("[OK] 已加载")
             self._状态识别状态.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px;")
         else:
-            self._状态识别状态.setText("❌ 不可用")
+            self._状态识别状态.setText("[X] 不可用")
             self._状态识别状态.setStyleSheet(f"color: {颜色.错误}; font-size: {布局常量.次要文字字号}px;")
     
     def 更新决策引擎状态(self, 可用: bool) -> None:
         """更新决策引擎状态"""
         if 可用:
-            self._决策引擎状态.setText("✅ 已加载")
+            self._决策引擎状态.setText("[OK] 已加载")
             self._决策引擎状态.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px;")
         else:
-            self._决策引擎状态.setText("❌ 不可用")
+            self._决策引擎状态.setText("[X] 不可用")
             self._决策引擎状态.setStyleSheet(f"color: {颜色.错误}; font-size: {布局常量.次要文字字号}px;")
     
     def 更新脱困状态(self, 可用: bool) -> None:
         """更新脱困模块状态"""
         if 可用:
-            self._脱困状态.setText("✅ 已加载")
+            self._脱困状态.setText("[OK] 已加载")
             self._脱困状态.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px;")
         else:
-            self._脱困状态.setText("❌ 不可用")
+            self._脱困状态.setText("[X] 不可用")
             self._脱困状态.setStyleSheet(f"color: {颜色.错误}; font-size: {布局常量.次要文字字号}px;")
     
     def 更新自动调参状态(self, 可用: bool) -> None:
@@ -338,7 +338,7 @@ class 增强模块状态卡片(Card):
             self._性能模式标签.setText("⚠️ 低性能")
             self._性能模式标签.setStyleSheet(f"color: {颜色.警告}; font-size: {布局常量.次要文字字号}px; font-weight: 500;")
         else:
-            self._性能模式标签.setText("✅ 正常")
+            self._性能模式标签.setText("[OK] 正常")
             self._性能模式标签.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.次要文字字号}px; font-weight: 500;")
     
     def 更新模块状态(self, 状态数据: Dict[str, bool]) -> None:
@@ -376,7 +376,7 @@ class 运行状态卡片(Card):
     """运行状态监控卡片组件 (Requirements 4.4)"""
     
     def __init__(self, parent=None):
-        super().__init__("📊 运行状态", "", parent)
+        super().__init__("运行状态", "", parent)
         self._初始化内容()
     
     def _初始化内容(self) -> None:
@@ -502,7 +502,7 @@ class 运行日志卡片(Card):
     """运行日志显示卡片组件"""
     
     def __init__(self, parent=None):
-        super().__init__("📝 运行日志", "", parent)
+        super().__init__("运行日志", "", parent)
         self._初始化内容()
     
     def _初始化内容(self) -> None:

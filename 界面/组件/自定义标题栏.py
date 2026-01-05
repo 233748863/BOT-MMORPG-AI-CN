@@ -22,7 +22,7 @@ from PySide6.QtWidgets import (
     QWidget, QHBoxLayout, QLabel, QPushButton, QSizePolicy
 )
 from PySide6.QtCore import Qt, Signal, QPoint
-from PySide6.QtGui import QMouseEvent
+from PySide6.QtGui import QMouseEvent, QFont, QPainter, QColor
 
 
 class 自定义标题栏(QWidget):
@@ -61,49 +61,70 @@ class 自定义标题栏(QWidget):
         # 设置固定高度
         self.setFixedHeight(36)
         
+        # 设置对象名称用于样式选择器
+        self.setObjectName("CustomTitleBar")
+        
         # 主布局
         布局 = QHBoxLayout(self)
         布局.setContentsMargins(12, 0, 0, 0)
         布局.setSpacing(0)
         
-        # 应用图标
-        self._图标标签 = QLabel("🎮")
+        # 应用图标 - 使用游戏手柄 emoji
+        self._图标标签 = QLabel()
         self._图标标签.setFixedSize(24, 24)
         self._图标标签.setAlignment(Qt.AlignCenter)
+        self._图标标签.setText("🎮")
+        图标字体 = QFont("Segoe UI Emoji", 14)
+        self._图标标签.setFont(图标字体)
+        self._图标标签.setStyleSheet("""
+            background: transparent;
+        """)
         布局.addWidget(self._图标标签)
         
-        # 标题文字
+        # 标题文字 - 使用明确的白色，确保在深蓝背景上可见
         self._标题标签 = QLabel("MMORPG游戏AI助手")
         self._标题标签.setObjectName("标题栏标题")
+        标题字体 = QFont("Microsoft YaHei UI", 11)
+        标题字体.setBold(True)
+        self._标题标签.setFont(标题字体)
         self._标题标签.setStyleSheet("""
-            color: #FFFFFF;
-            font-weight: 600;
-            font-size: 14px;
-            padding-left: 8px;
-            background: transparent;
+            QLabel {
+                color: white;
+                padding-left: 8px;
+                background: transparent;
+            }
         """)
         布局.addWidget(self._标题标签)
         
         # 弹性空间
         布局.addStretch()
         
-        # 配置按钮 (需求 1.1 - 配置界面入口)
-        self._配置按钮 = self._创建功能按钮("⚙️", "打开配置界面")
-        self._配置按钮.setObjectName("配置按钮")
-        布局.addWidget(self._配置按钮)
-        
         # 窗口控制按钮
         self._最小化按钮 = self._创建控制按钮("─", "最小化")
         self._最大化按钮 = self._创建控制按钮("□", "最大化")
         self._关闭按钮 = self._创建控制按钮("✕", "关闭")
-        self._关闭按钮.setObjectName("关闭按钮")
+        # 关闭按钮特殊样式：悬停时红色
+        self._关闭按钮.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: #FFFFFF;
+                font-family: "Microsoft YaHei UI", sans-serif;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: #E81123;
+            }
+            QPushButton:pressed {
+                background-color: #C50F1F;
+            }
+        """)
         
         布局.addWidget(self._最小化按钮)
         布局.addWidget(self._最大化按钮)
         布局.addWidget(self._关闭按钮)
         
         # 连接信号
-        self._配置按钮.clicked.connect(self._处理配置)
         self._最小化按钮.clicked.connect(self._处理最小化)
         self._最大化按钮.clicked.connect(self._处理最大化)
         self._关闭按钮.clicked.connect(self._处理关闭)
@@ -122,8 +143,22 @@ class 自定义标题栏(QWidget):
         按钮 = QPushButton(文字)
         按钮.setFixedSize(46, 36)
         按钮.setToolTip(提示)
-        按钮.setObjectName("标题栏按钮")
         按钮.setCursor(Qt.ArrowCursor)
+        按钮.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: #FFFFFF;
+                font-family: "Microsoft YaHei UI", sans-serif;
+                font-size: 13px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.15);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255, 255, 255, 0.25);
+            }
+        """)
         return 按钮
     
     def _创建功能按钮(self, 文字: str, 提示: str) -> QPushButton:
@@ -138,88 +173,37 @@ class 自定义标题栏(QWidget):
             QPushButton实例
         """
         按钮 = QPushButton(文字)
-        按钮.setFixedSize(36, 36)
+        按钮.setFixedSize(46, 36)
         按钮.setToolTip(提示)
-        按钮.setObjectName("功能按钮")
         按钮.setCursor(Qt.ArrowCursor)
+        按钮.setStyleSheet("""
+            QPushButton {
+                background-color: transparent;
+                border: none;
+                color: #FFFFFF;
+                font-family: "Microsoft YaHei UI", sans-serif;
+                font-size: 12px;
+                margin-right: 8px;
+            }
+            QPushButton:hover {
+                background-color: rgba(255, 255, 255, 0.2);
+            }
+            QPushButton:pressed {
+                background-color: rgba(255, 255, 255, 0.3);
+            }
+        """)
         return 按钮
     
     def _应用样式(self) -> None:
         """应用样式表"""
-        self.setStyleSheet("""
-            自定义标题栏 {
-                background-color: #1E3A5F;
-            }
-            
-            QPushButton#标题栏按钮 {
-                background-color: transparent;
-                border: none;
-                color: #FFFFFF;
-                font-size: 13px;
-                font-weight: normal;
-                min-width: 46px;
-                max-width: 46px;
-                min-height: 36px;
-                max-height: 36px;
-                border-radius: 0px;
-                padding: 0;
-            }
-            
-            QPushButton#标题栏按钮:hover {
-                background-color: rgba(255, 255, 255, 0.15);
-            }
-            
-            QPushButton#标题栏按钮:pressed {
-                background-color: rgba(255, 255, 255, 0.25);
-            }
-            
-            QPushButton#关闭按钮 {
-                background-color: transparent;
-                border: none;
-                color: #FFFFFF;
-                font-size: 13px;
-                font-weight: normal;
-                min-width: 46px;
-                max-width: 46px;
-                min-height: 36px;
-                max-height: 36px;
-                border-radius: 0px;
-                padding: 0;
-            }
-            
-            QPushButton#关闭按钮:hover {
-                background-color: #E81123;
-                color: #FFFFFF;
-            }
-            
-            QPushButton#关闭按钮:pressed {
-                background-color: #C50F1F;
-                color: #FFFFFF;
-            }
-            
-            QPushButton#配置按钮, QPushButton#功能按钮 {
-                background-color: transparent;
-                border: none;
-                color: #FFFFFF;
-                font-size: 16px;
-                font-weight: normal;
-                min-width: 36px;
-                max-width: 36px;
-                min-height: 36px;
-                max-height: 36px;
-                border-radius: 4px;
-                padding: 0;
-                margin-right: 8px;
-            }
-            
-            QPushButton#配置按钮:hover, QPushButton#功能按钮:hover {
-                background-color: rgba(255, 255, 255, 0.2);
-            }
-            
-            QPushButton#配置按钮:pressed, QPushButton#功能按钮:pressed {
-                background-color: rgba(255, 255, 255, 0.3);
-            }
-        """)
+        # 注意：背景色通过 paintEvent 绘制，确保不被全局样式覆盖
+        pass
+    
+    def paintEvent(self, event) -> None:
+        """绘制事件 - 强制绘制深蓝色背景"""
+        painter = QPainter(self)
+        painter.fillRect(self.rect(), QColor("#1E3A5F"))
+        painter.end()
     
     def _处理最小化(self) -> None:
         """处理最小化按钮点击"""

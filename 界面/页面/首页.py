@@ -42,7 +42,7 @@ class 状态卡片(Card):
     """
     
     def __init__(self, parent=None):
-        super().__init__("系统状态", "📊", parent)
+        super().__init__("系统状态", "", parent)
         self._初始化状态显示()
     
     def _初始化状态显示(self) -> None:
@@ -88,31 +88,31 @@ class 状态卡片(Card):
     def 更新模型状态(self, 已加载: bool, 路径: str = "") -> None:
         """更新模型状态显示"""
         if 已加载:
-            self._模型状态标签.setText("✅ 已加载")
+            self._模型状态标签.setText("[OK] 已加载")
             self._模型状态标签.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.正文字号}px; font-weight: 500;")
         else:
-            self._模型状态标签.setText("❌ 未加载")
+            self._模型状态标签.setText("[X] 未加载")
             self._模型状态标签.setStyleSheet(f"color: {颜色.错误}; font-size: {布局常量.正文字号}px; font-weight: 500;")
     
     def 更新GPU状态(self, 可用: bool, 设备名: str = "") -> None:
         """更新GPU状态显示"""
         if 可用:
-            显示文本 = f"✅ 可用"
+            显示文本 = f"[OK] 可用"
             if 设备名:
-                显示文本 = f"✅ {设备名}"
+                显示文本 = f"[OK] {设备名}"
             self._GPU状态标签.setText(显示文本)
             self._GPU状态标签.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.正文字号}px; font-weight: 500;")
         else:
-            self._GPU状态标签.setText("⚠️ 仅CPU")
+            self._GPU状态标签.setText("[!] 仅CPU")
             self._GPU状态标签.setStyleSheet(f"color: {颜色.警告}; font-size: {布局常量.正文字号}px; font-weight: 500;")
     
     def 更新数据文件状态(self, 文件数: int, 样本数: int) -> None:
         """更新数据文件状态显示"""
         if 文件数 > 0:
-            self._数据文件标签.setText(f"📁 {文件数}个文件 ({样本数}样本)")
+            self._数据文件标签.setText(f"{文件数}个文件 ({样本数}样本)")
             self._数据文件标签.setStyleSheet(f"color: {颜色.成功}; font-size: {布局常量.正文字号}px; font-weight: 500;")
         else:
-            self._数据文件标签.setText("📁 无数据")
+            self._数据文件标签.setText("无数据")
             self._数据文件标签.setStyleSheet(f"color: {颜色.警告}; font-size: {布局常量.正文字号}px; font-weight: 500;")
     
     def 更新训练状态(self, 上次训练时间: Optional[datetime], 损失值: Optional[float] = None) -> None:
@@ -145,14 +145,20 @@ class 快捷按钮(QPushButton):
         self._初始化样式()
     
     def _初始化样式(self) -> None:
-        """初始化按钮样式"""
+        """初始化按钮样式
+        
+        按钮文字居中显示 (Requirements 1.1, 1.2, 1.3):
+        - 使用单行文本，避免多行对齐问题
+        - QPushButton 默认居中显示文本
+        - 描述信息通过 ToolTip 显示
+        """
         # 设置尺寸在规定范围内 (120-140px宽，80-90px高)
         self.setFixedSize(130, 85)
         self.setCursor(Qt.PointingHandCursor)
         
-        # 设置按钮文本：图标 + 标题 + 描述
-        self.setText(f"{self._图标}\n{self._标题}\n{self._描述}")
-        self.setToolTip(self._描述)
+        # 设置按钮文本：只显示标题（单行文本，确保居中）
+        self.setText(self._标题)
+        self.setToolTip(f"{self._标题}: {self._描述}")
         
         self.setStyleSheet(f"""
             QPushButton {{
@@ -162,7 +168,6 @@ class 快捷按钮(QPushButton):
                 font-size: {布局常量.正文字号}px;
                 font-weight: 500;
                 color: {颜色.标题};
-                text-align: center;
                 padding: 8px;
             }}
             QPushButton:hover {{
@@ -225,7 +230,7 @@ class 提示卡片(Card):
         提示布局.setContentsMargins(0, 0, 0, 0)
         提示布局.setSpacing(8)
         
-        图标 = QLabel("💡")
+        图标 = QLabel("[提示]")
         图标.setStyleSheet(f"font-size: {布局常量.页面标题字号}px;")
         提示布局.addWidget(图标)
         
@@ -249,7 +254,7 @@ class 快捷键卡片(Card):
     """
     
     def __init__(self, parent=None):
-        super().__init__("快捷键", "⌨️", parent)
+        super().__init__("快捷键", "", parent)
         self._初始化快捷键显示()
     
     def _初始化快捷键显示(self) -> None:
@@ -282,8 +287,11 @@ class 首页(QWidget):
         super().__init__(parent)
         self._初始化界面()
         
-        # 延迟检测系统状态
+        # 延迟检测系统状态（不包括GPU）
         QTimer.singleShot(100, self._检测系统状态)
+        
+        # 后台线程检测GPU（避免阻塞UI）
+        QTimer.singleShot(500, self._后台检测GPU)
     
     def _初始化界面(self) -> None:
         """
@@ -304,7 +312,7 @@ class 首页(QWidget):
         主布局.setSpacing(布局常量.卡片间距)
         
         # ==================== 顶部：页面标题 ====================
-        标题 = QLabel("🎮 MMORPG游戏AI助手")
+        标题 = QLabel("MMORPG游戏AI助手")
         标题.setStyleSheet(f"""
             font-size: {布局常量.页面标题字号}px;
             font-weight: bold;
@@ -333,19 +341,19 @@ class 首页(QWidget):
         按钮布局.setSpacing(布局常量.卡片间距)
         
         # 创建4个快捷按钮 (Requirements 6.4: 每个按钮包含图标、标题和描述)
-        self._快速运行按钮 = 快捷按钮("▶️", "快速运行", "启动AI")
+        self._快速运行按钮 = 快捷按钮("", "快速运行", "启动AI")
         self._快速运行按钮.clicked.connect(self.快速运行点击.emit)
         按钮布局.addWidget(self._快速运行按钮)
         
-        self._开始录制按钮 = 快捷按钮("🎥", "开始录制", "收集数据")
+        self._开始录制按钮 = 快捷按钮("", "开始录制", "收集数据")
         self._开始录制按钮.clicked.connect(self.开始录制点击.emit)
         按钮布局.addWidget(self._开始录制按钮)
         
-        self._训练模型按钮 = 快捷按钮("🧠", "训练模型", "训练AI")
+        self._训练模型按钮 = 快捷按钮("", "训练模型", "训练AI")
         self._训练模型按钮.clicked.connect(self.训练模型点击.emit)
         按钮布局.addWidget(self._训练模型按钮)
         
-        self._数据管理按钮 = 快捷按钮("📁", "数据管理", "管理数据")
+        self._数据管理按钮 = 快捷按钮("", "数据管理", "管理数据")
         self._数据管理按钮.clicked.connect(self.数据管理点击.emit)
         按钮布局.addWidget(self._数据管理按钮)
         
@@ -397,6 +405,29 @@ class 首页(QWidget):
     def 刷新状态(self) -> None:
         """手动刷新系统状态"""
         self._检测系统状态()
+        self._后台检测GPU()
+    
+    def _后台检测GPU(self) -> None:
+        """在后台线程中检测GPU，避免阻塞UI"""
+        import threading
+        
+        def 检测任务():
+            可用, 设备名 = _检测GPU_后台()
+            # 使用 QTimer 在主线程更新 UI
+            QTimer.singleShot(0, lambda: self._更新GPU状态(可用, 设备名))
+        
+        线程 = threading.Thread(target=检测任务, daemon=True)
+        线程.start()
+    
+    def _更新GPU状态(self, 可用: bool, 设备名: str) -> None:
+        """更新GPU状态显示"""
+        self._状态卡片.更新GPU状态(可用, 设备名)
+        
+        # 更新提示
+        状态 = 检测系统状态()
+        状态["GPU可用"] = 可用
+        状态["GPU设备名"] = 设备名
+        self._更新提示(状态)
     
     def 获取状态卡片(self) -> 状态卡片:
         """获取状态卡片组件"""
@@ -479,6 +510,19 @@ def _检测模型文件() -> tuple:
 def _检测GPU() -> tuple:
     """
     检测GPU是否可用
+    
+    注意：此函数会延迟导入 TensorFlow/PyTorch，避免启动时阻塞
+    
+    返回:
+        (是否可用, 设备名称)
+    """
+    # 先返回未知状态，实际检测在后台进行
+    return False, "检测中..."
+
+
+def _检测GPU_后台() -> tuple:
+    """
+    后台检测GPU（实际执行导入和检测）
     
     返回:
         (是否可用, 设备名称)

@@ -32,7 +32,7 @@ from PySide6.QtGui import QColor
 
 from 界面.样式.主题 import 颜色
 from 界面.样式.布局常量 import 布局常量
-from 界面.组件.通用组件 import Card
+from 界面.组件.通用组件 import Card, 确认对话框, 提示对话框
 
 
 class 数据文件信息:
@@ -647,10 +647,23 @@ class 数据管理页(QWidget):
         self._清洗按钮.clicked.connect(self._执行清洗)
         布局.addWidget(self._清洗按钮)
         
-        # 删除按钮
-        self._删除按钮 = QPushButton("🗑️ 删除")
-        self._删除按钮.setProperty("class", "danger")
-        self._删除按钮.setFixedWidth(70)
+        # 删除按钮 - 使用和其他按钮一致的样式
+        self._删除按钮 = QPushButton("删除")
+        self._删除按钮.setFixedWidth(60)
+        self._删除按钮.setFixedHeight(32)
+        self._删除按钮.setStyleSheet(f"""
+            QPushButton {{
+                background-color: #EF4444;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 500;
+            }}
+            QPushButton:hover {{
+                background-color: #DC2626;
+            }}
+        """)
         self._删除按钮.clicked.connect(self._执行删除)
         布局.addWidget(self._删除按钮)
         
@@ -867,19 +880,18 @@ class 数据管理页(QWidget):
         选中文件 = self._获取选中文件()
         
         if not 选中文件:
-            QMessageBox.warning(self, "提示", "请先选择要预处理的文件")
+            提示对话框.警告提示(self, "提示", "请先选择要预处理的文件")
             return
         
-        回复 = QMessageBox.question(
+        回复 = 确认对话框.询问(
             self,
             "确认预处理",
             f"确定要对选中的 {len(选中文件)} 个文件进行数据增强吗？\n\n"
             "这将创建新的增强数据文件。",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            "确定", "取消"
         )
         
-        if 回复 == QMessageBox.Yes:
+        if 回复 == 确认对话框.确认:
             self._启动处理("预处理", 选中文件)
     
     def _执行清洗(self) -> None:
@@ -887,19 +899,18 @@ class 数据管理页(QWidget):
         选中文件 = self._获取选中文件()
         
         if not 选中文件:
-            QMessageBox.warning(self, "提示", "请先选择要清洗的文件")
+            提示对话框.警告提示(self, "提示", "请先选择要清洗的文件")
             return
         
-        回复 = QMessageBox.question(
+        回复 = 确认对话框.询问(
             self,
             "确认清洗",
             f"确定要对选中的 {len(选中文件)} 个文件进行数据清洗吗？\n\n"
             "这将平衡各动作类别的样本数量，创建新的清洗后文件。",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            "确定", "取消"
         )
         
-        if 回复 == QMessageBox.Yes:
+        if 回复 == 确认对话框.确认:
             self._启动处理("清洗", 选中文件)
     
     def _执行删除(self) -> None:
@@ -907,19 +918,18 @@ class 数据管理页(QWidget):
         选中文件 = self._获取选中文件()
         
         if not 选中文件:
-            QMessageBox.warning(self, "提示", "请先选择要删除的文件")
+            提示对话框.警告提示(self, "提示", "请先选择要删除的文件")
             return
         
-        回复 = QMessageBox.warning(
+        回复 = 确认对话框.询问(
             self,
             "确认删除",
             f"确定要删除选中的 {len(选中文件)} 个文件吗？\n\n"
             "⚠️ 此操作不可恢复！",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.No
+            "删除", "取消"
         )
         
-        if 回复 == QMessageBox.Yes:
+        if 回复 == 确认对话框.确认:
             self._启动处理("删除", 选中文件)
     
     def _启动处理(self, 操作类型: str, 文件列表: List[str]) -> None:
@@ -964,9 +974,9 @@ class 数据管理页(QWidget):
         
         # 显示结果
         if 成功:
-            QMessageBox.information(self, "完成", 消息)
+            提示对话框.信息提示(self, "完成", 消息)
         else:
-            QMessageBox.critical(self, "错误", 消息)
+            提示对话框.错误提示(self, "错误", 消息)
         
         # 刷新文件列表
         self.刷新文件列表()

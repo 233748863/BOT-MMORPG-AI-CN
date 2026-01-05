@@ -3,7 +3,6 @@
 MMORPG游戏AI助手 - GUI启动器
 
 直接启动图形用户界面，无需通过命令行菜单。
-集成配置界面功能。
 """
 
 import os
@@ -30,13 +29,6 @@ warnings.filterwarnings('ignore', module='keras')
 import logging
 logging.getLogger('tensorflow').setLevel(logging.ERROR)
 logging.getLogger('absl').setLevel(logging.ERROR)
-
-# 尝试导入配置界面模块
-try:
-    from 界面.配置界面 import 配置界面
-    配置界面可用 = True
-except ImportError:
-    配置界面可用 = False
 
 
 def 检查依赖():
@@ -66,46 +58,10 @@ def 检查依赖():
     return True
 
 
-def 显示启动菜单():
-    """显示启动菜单"""
-    print()
-    print("=" * 50)
-    print("🎮 MMORPG游戏AI助手 - 启动菜单")
-    print("=" * 50)
-    print()
-    print("请选择启动模式:")
-    print("  1. 启动主界面")
-    print("  2. 打开配置界面" + (" ✅" if 配置界面可用 else " ❌ (不可用)"))
-    print("  3. 退出")
-    print()
-    return input("请输入选项 (1-3, 默认1): ").strip() or "1"
-
-
-def 启动配置界面():
-    """启动配置界面"""
-    if not 配置界面可用:
-        print("❌ 配置界面模块不可用")
-        return 1
-    
-    try:
-        from PySide6.QtWidgets import QApplication
-        app = QApplication(sys.argv)
-        窗口 = 配置界面()
-        窗口.show()
-        return app.exec()
-    except Exception as e:
-        print(f"❌ 启动配置界面失败: {e}")
-        import traceback
-        traceback.print_exc()
-        return 1
-
-
 def 主程序():
     """启动GUI主程序"""
     print()
-    print("=" * 50)
-    print("🎮 MMORPG游戏AI助手 - 图形界面")
-    print("=" * 50)
+    print("🎮 MMORPG游戏AI助手")
     print()
     
     # 检查依赖
@@ -113,35 +69,16 @@ def 主程序():
         input("按回车键退出...")
         return 1
     
-    # 显示可用模块状态
-    print("可用功能模块:")
-    print(f"  - 配置界面: {'✅ 可用' if 配置界面可用 else '❌ 不可用'}")
-    
-    # 显示启动菜单
-    选项 = 显示启动菜单()
-    
-    if 选项 == "1":
-        print("正在启动主界面...")
-        try:
-            from 界面.主程序 import 启动应用
-            return 启动应用()
-        except Exception as e:
-            print(f"\n❌ 启动失败: {e}")
-            import traceback
-            traceback.print_exc()
-            input("\n按回车键退出...")
-            return 1
-    
-    elif 选项 == "2":
-        print("正在启动配置界面...")
-        return 启动配置界面()
-    
-    elif 选项 == "3":
-        print("👋 再见!")
-        return 0
-    
-    else:
-        print("❌ 无效选项")
+    # 直接启动主界面
+    print("正在启动主界面...")
+    try:
+        from 界面.主程序 import 启动应用
+        return 启动应用()
+    except Exception as e:
+        print(f"\n❌ 启动失败: {e}")
+        import traceback
+        traceback.print_exc()
+        input("\n按回车键退出...")
         return 1
 
 
