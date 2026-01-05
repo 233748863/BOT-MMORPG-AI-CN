@@ -17,7 +17,11 @@ MOUSEEVENTF_RIGHTDOWN = 0x0008
 MOUSEEVENTF_RIGHTUP = 0x0010
 MOUSEEVENTF_MIDDLEDOWN = 0x0020
 MOUSEEVENTF_MIDDLEUP = 0x0040
+MOUSEEVENTF_WHEEL = 0x0800
 MOUSEEVENTF_ABSOLUTE = 0x8000
+
+# 滚轮滚动单位
+WHEEL_DELTA = 120
 
 
 def 获取屏幕尺寸():
@@ -120,6 +124,26 @@ def 中键点击(持续时间=0.05):
     user32.mouse_event(MOUSEEVENTF_MIDDLEDOWN, 0, 0, 0, 0)
     time.sleep(持续时间)
     user32.mouse_event(MOUSEEVENTF_MIDDLEUP, 0, 0, 0, 0)
+
+
+def 滚轮向上(滚动量=1):
+    """
+    鼠标滚轮向上滚动
+    
+    参数:
+        滚动量: 滚动的单位数量，默认为1
+    """
+    user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, WHEEL_DELTA * 滚动量, 0)
+
+
+def 滚轮向下(滚动量=1):
+    """
+    鼠标滚轮向下滚动
+    
+    参数:
+        滚动量: 滚动的单位数量，默认为1
+    """
+    user32.mouse_event(MOUSEEVENTF_WHEEL, 0, 0, -WHEEL_DELTA * 滚动量, 0)
 
 
 if __name__ == "__main__":
