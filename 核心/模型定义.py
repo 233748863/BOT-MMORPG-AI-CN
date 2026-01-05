@@ -15,7 +15,8 @@ from tflearn.layers.normalization import local_response_normalization
 from tflearn.layers.merge_ops import merge
 
 
-def inception_v3(宽度, 高度, 帧数, 学习率, 输出类别=9, 模型名称='游戏AI模型'):
+def inception_v3(宽度, 高度, 帧数, 学习率, 输出类别=9, 模型名称='游戏AI模型', 
+                 自定义损失函数=None):
     """
     Inception V3 模型 (Google 2015)
     
@@ -26,6 +27,7 @@ def inception_v3(宽度, 高度, 帧数, 学习率, 输出类别=9, 模型名称
         学习率: 训练学习率
         输出类别: 输出动作类别数
         模型名称: 模型保存名称
+        自定义损失函数: 可选的自定义损失函数（如加权交叉熵损失）
     
     返回:
         tflearn.DNN: 编译好的模型
@@ -145,10 +147,16 @@ def inception_v3(宽度, 高度, 帧数, 学习率, 输出类别=9, 模型名称
     # 全连接输出层
     loss = fully_connected(pool5_7_7, 输出类别, activation='softmax')
 
-    # 回归层
-    network = regression(loss, optimizer='momentum',
-                        loss='categorical_crossentropy',
-                        learning_rate=学习率, name='targets')
+    # 回归层 - 支持自定义损失函数
+    # 需求 6.2: 使用加权损失函数而非默认的 categorical_crossentropy
+    if 自定义损失函数 is not None:
+        network = regression(loss, optimizer='momentum',
+                            loss=自定义损失函数,
+                            learning_rate=学习率, name='targets')
+    else:
+        network = regression(loss, optimizer='momentum',
+                            loss='categorical_crossentropy',
+                            learning_rate=学习率, name='targets')
 
     # 创建DNN模型
     model = tflearn.DNN(network,

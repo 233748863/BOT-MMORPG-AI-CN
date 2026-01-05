@@ -420,14 +420,40 @@ def 主程序():
     
     # 创建模型
     print("\n🏗️  创建模型...")
+    
+    # 需求 6.1, 6.2: 确保加权损失函数被传递给模型
+    # 需求 6.3: 记录使用的损失函数类型
+    tf_损失函数 = None
+    使用的损失函数类型 = "categorical_crossentropy (默认)"
+    
+    if 启用类别权重 and 加权损失函数 is not None:
+        try:
+            tf_损失函数 = 加权损失函数.获取tensorflow损失函数()
+            使用的损失函数类型 = f"加权交叉熵损失 (策略: {选择的权重策略.value})"
+            print(f"✅ 使用加权损失函数: {使用的损失函数类型}")
+        except Exception as e:
+            # 需求 6.4: 如果类别权重无法应用，记录警告并回退到默认损失函数
+            print(f"⚠️  创建加权损失函数失败: {e}")
+            print("   将使用默认的 categorical_crossentropy 损失函数")
+            tf_损失函数 = None
+            使用的损失函数类型 = "categorical_crossentropy (回退)"
+    else:
+        print(f"ℹ️  使用损失函数: {使用的损失函数类型}")
+    
     模型 = inception_v3(
         模型输入宽度, 
         模型输入高度, 
         3, 
         学习率, 
         输出类别=总动作数, 
-        模型名称=模型保存路径
+        模型名称=模型保存路径,
+        自定义损失函数=tf_损失函数
     )
+    
+    # 需求 6.3: 记录使用的损失函数类型
+    print(f"📝 训练配置:")
+    print(f"   - 损失函数: {使用的损失函数类型}")
+    print(f"   - 类别权重: {'启用' if 启用类别权重 else '禁用'}")
     
     # 检查是否有已保存的模型
     if os.path.exists(模型保存路径 + '.index'):
@@ -497,8 +523,23 @@ def 主程序():
                     run_id=模型保存路径
                 )
                 
-                # 更新当前loss（简化处理，实际应从训练回调获取）
-                当前loss = 0.0  # TODO: 从训练过程获取实际loss
+                # 需求 7.1, 7.2: 从训练过程获取实际 loss 值
+                # 使用模型的 evaluate 方法计算训练集上的实际 loss
+                try:
+                    评估结果 = 模型.evaluate({'input': X训练}, {'targets': Y训练})
+                    if isinstance(评估结果, (list, tuple)) and len(评估结果) > 0:
+                        当前loss = float(评估结果[0])
+                    elif isinstance(评估结果, (int, float)):
+                        当前loss = float(评估结果)
+                    else:
+                        当前loss = 0.0
+                    # 需求 7.4: 在训练进度输出中显示 loss 值
+                    print(f"      📉 当前批次 Loss: {当前loss:.4f}")
+                except Exception as e:
+                    # 如果评估失败，使用估计值
+                    print(f"      ⚠️  获取 loss 值失败: {e}")
+                    当前loss = 0.0
+                
                 轮次loss总和 += 当前loss * len(训练数据)
                 轮次样本数 += len(训练数据)
                 
@@ -508,7 +549,8 @@ def 主程序():
                 
                 # 定期保存检查点
                 if (计数 + 1) % 检查点保存间隔 == 0:
-                    print(f"\n💾 保存检查点...")
+                    # 需求 7.3: 在检查点元数据中包含实际的 loss 值
+                    print(f"\n💾 保存检查点 (Loss: {当前loss:.4f})...")
                     检查点管理.保存检查点(
                         模型=模型,
                         优化器状态={},  # TFLearn 不直接暴露优化器状态
@@ -549,13 +591,14 @@ def 主程序():
             可视化.on_epoch_end(轮次 + 1, 训练loss=轮次平均loss)
         
         # 每轮结束保存检查点
-        print(f"\n💾 保存轮次 {轮次 + 1} 的检查点...")
+        # 需求 7.3: 在检查点元数据中包含实际的 loss 值
+        print(f"\n💾 保存轮次 {轮次 + 1} 的检查点 (平均Loss: {轮次平均loss:.4f})...")
         检查点管理.保存检查点(
             模型=模型,
             优化器状态={},
             当前epoch=轮次 + 1,
             当前batch=0,
-            loss值=当前loss
+            loss值=轮次平均loss  # 使用轮次平均 loss 而不是最后一个批次的 loss
         )
         模型.save(模型保存路径)
     

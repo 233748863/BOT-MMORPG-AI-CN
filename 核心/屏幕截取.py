@@ -257,7 +257,7 @@ def 从配置自动检测() -> Optional[Tuple[int, int, int, int]]:
         return 自动检测游戏窗口()
 
 
-def 截取屏幕(区域=None, 使用优化=True):
+def 截取屏幕(区域=None, region=None, 使用优化=True):
     """
     截取屏幕指定区域
     
@@ -265,15 +265,20 @@ def 截取屏幕(区域=None, 使用优化=True):
     需求: 5.2 - 支持相同的区域参数格式（左, 上, 右, 下）
     需求: 5.3 - 返回相同格式的图像（numpy 数组，RGB）
     需求: 5.4 - 是当前实现的直接替代品
+    需求: 1.1, 1.2, 1.3, 1.4 - 参数别名支持，保持向后兼容
     
     参数:
         区域: tuple (左, 上, 右, 下) 或 None (全屏)
+        region: 区域的别名，保持向后兼容
         使用优化: 是否使用优化截取器
     
     返回:
         numpy数组: RGB格式的图像
     """
     global _优化截取器实例
+    
+    # 优先使用 区域 参数，如果未提供则使用 region（向后兼容）
+    实际区域 = 区域 if 区域 is not None else region
     
     # 尝试使用优化截取器
     if 使用优化 and 屏幕截取优化可用:
@@ -288,8 +293,8 @@ def 截取屏幕(区域=None, 使用优化=True):
             
             # 转换区域格式：(左, 上, 右, 下) -> (x, y, width, height)
             优化区域 = None
-            if 区域:
-                左, 上, 右, 下 = 区域
+            if 实际区域:
+                左, 上, 右, 下 = 实际区域
                 优化区域 = (左, 上, 右 - 左, 下 - 上)
             
             图像 = _优化截取器实例.截取(优化区域)
@@ -303,7 +308,7 @@ def 截取屏幕(区域=None, 使用优化=True):
             logger.warning(f"优化截取器失败，回退到标准方式: {e}")
     
     # 标准截取方式（GDI）
-    return _标准GDI截取(区域)
+    return _标准GDI截取(实际区域)
 
 
 def 截取并缩放(区域=None, 目标尺寸=(480, 270), 使用优化=True):
@@ -327,6 +332,8 @@ def _标准GDI截取(区域=None):
     """
     标准 GDI 截取方式（回退方案）
     
+    需求: 3.1, 3.2, 3.3 - 修复宽高计算，不加 1
+    
     参数:
         区域: tuple (左, 上, 右, 下) 或 None (全屏)
     
@@ -337,8 +344,9 @@ def _标准GDI截取(区域=None):
 
     if 区域:
         左, 上, 右, 下 = 区域
-        宽度 = 右 - 左 + 1
-        高度 = 下 - 上 + 1
+        # 修复: 宽度和高度计算不应加 1
+        宽度 = 右 - 左
+        高度 = 下 - 上
     else:
         宽度 = win32api.GetSystemMetrics(win32con.SM_CXVIRTUALSCREEN)
         高度 = win32api.GetSystemMetrics(win32con.SM_CYVIRTUALSCREEN)

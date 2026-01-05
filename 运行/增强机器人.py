@@ -38,6 +38,16 @@ from 核心.按键检测 import 检测按键
 from 核心.动作检测 import 检测动作变化
 from 核心.模型定义 import inception_v3
 from 核心.数据类型 import 游戏状态, 检测结果, 决策上下文, 实体类型
+
+# 尝试导入状态检测模块 - 需求: 8.1, 8.2, 8.3
+try:
+    from 核心.状态检测 import 状态检测器 as 状态检测器类
+    状态检测可用 = True
+except ImportError:
+    状态检测可用 = False
+    状态检测器类 = None
+    logger = logging.getLogger(__name__)
+    logger.warning("状态检测模块不可用，血量检测将使用默认值")
 from 配置.设置 import (
     游戏窗口区域, 模型输入宽度, 模型输入高度, 学习率,
     模型保存路径, 预训练模型路径, 总动作数, 训练模式,
@@ -87,7 +97,12 @@ class 增强版游戏AI机器人:
         self._YOLO可用 = False
         self._状态识别可用 = False
         self._决策引擎可用 = False
+        self._状态检测可用 = False  # 血量/蓝量检测 - 需求: 8.2
         self._已降级 = False
+        
+        # 状态检测器 - 需求: 8.1, 8.2, 8.3
+        self.状态检测器 = None
+        self._上次有效血量 = 1.0  # 用于检测失败时的回退值
         
         # 运动检测
         self.运动日志 = deque(maxlen=运动日志长度)
@@ -177,6 +192,9 @@ class 增强版游戏AI机器人:
         if 模块启用配置.get("决策引擎", True):
             self._初始化决策引擎()
         
+        # 初始化状态检测器 - 需求: 8.1, 8.2
+        self._初始化状态检测器()
+        
         # 汇总状态
         可用模块数 = sum([self._YOLO可用, self._状态识别可用, self._决策引擎可用])
         print(f"✅ 增强模块初始化完成: {可用模块数}/3 个模块可用")
@@ -252,6 +270,76 @@ class 增强版游戏AI机器人:
         except Exception as e:
             logger.error(f"决策引擎初始化失败: {e}")
             self._决策引擎可用 = False
+    
+    def _初始化状态检测器(self):
+        """
+        初始化状态检测器用于血量/蓝量检测
+        
+        需求: 8.1 - 使用状态检测器的实际血量百分比
+        需求: 8.2 - 与现有的状态检测器组件集成
+        需求: 8.3 - 检测失败时回退到 1.0
+        """
+        if not 状态检测可用:
+            logger.warning("状态检测模块不可用，血量检测将使用默认值 1.0")
+            self._状态检测可用 = False
+            return
+        
+        try:
+            # 尝试从配置加载状态检测配置
+            配置路径 = "配置/状态检测/default.json"
+            
+            import os
+            if os.path.exists(配置路径):
+                # 从配置文件加载
+                self.状态检测器 = 状态检测器类()
+                self.状态检测器.从配置加载(配置路径)
+                logger.info(f"状态检测器已从配置加载: {配置路径}")
+            else:
+                # 使用默认配置初始化
+                self.状态检测器 = 状态检测器类()
+                logger.info("状态检测器使用默认配置初始化")
+            
+            self._状态检测可用 = True
+            print("   ✓ 状态检测器 (血量/蓝量)")
+            
+        except Exception as e:
+            logger.error(f"状态检测器初始化失败: {e}")
+            self._状态检测可用 = False
+            self.状态检测器 = None
+            print("   ✗ 状态检测器 (不可用)")
+    
+    def _获取血量百分比(self, 屏幕: np.ndarray) -> float:
+        """
+        从状态检测器获取实际血量百分比
+        
+        需求: 8.1 - 使用状态检测器的实际血量百分比
+        需求: 8.3 - 检测失败时回退到 1.0 并记录警告
+        
+        Args:
+            屏幕: 游戏屏幕图像
+            
+        Returns:
+            血量百分比 (0.0-1.0)，检测失败时返回 1.0
+        """
+        if not self._状态检测可用 or self.状态检测器 is None:
+            return 1.0
+        
+        try:
+            # 调用状态检测器检测血量
+            检测结果 = self.状态检测器.检测(屏幕)
+            血量 = 检测结果.血量百分比
+            
+            # 验证血量值在有效范围内
+            if 0.0 <= 血量 <= 1.0:
+                self._上次有效血量 = 血量
+                return 血量
+            else:
+                logger.warning(f"血量检测返回无效值: {血量}，使用上次有效值")
+                return self._上次有效血量
+                
+        except Exception as e:
+            logger.warning(f"血量检测失败: {e}，回退到默认值 1.0")
+            return 1.0
     
     def _注册模型切换反馈(self):
         """
@@ -340,12 +428,15 @@ class 增强版游戏AI机器人:
                 # 统计附近敌人
                 附近敌人数量 = len([r for r in 检测结果列表 if r.类型 == 实体类型.怪物])
                 
+                # 获取实际血量百分比 - 需求: 8.1, 8.2, 8.3
+                血量百分比 = self._获取血量百分比(屏幕)
+                
                 # 构建决策上下文
                 上下文 = 决策上下文(
                     游戏状态=当前状态,
                     检测结果=检测结果列表,
                     模型预测=模型预测,
-                    血量百分比=1.0,  # TODO: 实现血量检测
+                    血量百分比=血量百分比,
                     附近敌人数量=附近敌人数量
                 )
                 
@@ -661,10 +752,15 @@ class 增强版游戏AI机器人:
         print(f"  YOLO检测器: {'✓ 可用' if self._YOLO可用 else '✗ 不可用'}")
         print(f"  状态识别器: {'✓ 可用' if self._状态识别可用 else '✗ 不可用'}")
         print(f"  决策引擎:   {'✓ 可用' if self._决策引擎可用 else '✗ 不可用'}")
+        print(f"  状态检测器: {'✓ 可用' if self._状态检测可用 else '✗ 不可用'}")
         print(f"  当前状态:   {self._上次状态.value}")
         print(f"  检测间隔:   每 {self.当前检测间隔} 帧")
         print(f"  当前帧率:   {self.当前帧率:.1f} FPS")
         print(f"  性能模式:   {'低性能' if self._已降级 else '正常'}")
+        
+        # 显示血量检测状态 - 需求: 8.1
+        if self._状态检测可用 and self.状态检测器:
+            print(f"  上次血量:   {self._上次有效血量*100:.1f}%")
         
         # 显示模型管理状态 - 需求: 4.4
         if self._决策引擎可用 and self.决策引擎:

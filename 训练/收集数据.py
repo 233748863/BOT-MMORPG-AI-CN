@@ -455,6 +455,10 @@ def 主程序():
     片段评估间隔 = 100  # 每100帧评估一次片段
     过滤计数 = 0
     保存计数 = 0
+    总片段数 = 0
+    
+    # 临时缓冲区：存储当前片段的帧数据，等待评估后决定是否保存
+    片段缓冲区 = []
     
     print("\n" + "=" * 50)
     print("📋 操作说明:")
@@ -526,23 +530,26 @@ def 主程序():
                 smart_recorder.add_frame(屏幕, 动作索引)
                 片段帧数 += 1
                 
+                # 将当前帧数据添加到片段缓冲区（等待评估后决定是否保存）
+                片段缓冲区.append([屏幕, 动作])
+                
                 # 每隔一定帧数评估片段
                 if 片段帧数 >= 片段评估间隔:
                     score, level, should_filter, reasons = smart_recorder.end_segment()
+                    总片段数 += 1
                     
                     # 根据过滤选项决定是否保存
                     if smart_recorder.should_save_segment(score, level, should_filter):
-                        # 保存这个片段的数据
+                        # 将缓冲区数据添加到训练数据列表
+                        训练数据.extend(片段缓冲区)
                         保存计数 += 1
                     else:
                         过滤计数 += 1
                     
-                    # 开始新片段
+                    # 清空缓冲区，开始新片段
+                    片段缓冲区 = []
                     smart_recorder.start_segment()
                     片段帧数 = 0
-                
-                # 添加到训练数据（根据过滤选项）
-                训练数据.append([屏幕, 动作])
                 
                 # 显示预览窗口
                 预览图 = cv2.resize(屏幕, (640, 360))
@@ -552,8 +559,9 @@ def 主程序():
                     break
 
                 # 显示进度（包含智能录制信息）
-                if len(训练数据) % 50 == 0:
+                if len(训练数据) % 50 == 0 or (len(片段缓冲区) + len(训练数据)) % 50 == 0:
                     当前时间 = time.time()
+                    总帧数 = len(训练数据) + len(片段缓冲区)
                     帧率 = 50 / (当前时间 - 上次时间) if 当前时间 > 上次时间 else 0
                     当前动作 = 获取动作名称(动作)
                     
@@ -561,11 +569,12 @@ def 主程序():
                     if 智能录制可用:
                         stats = smart_recorder.get_statistics()
                         current_score = smart_recorder.get_current_score()
-                        print(f"📊 帧数: {len(训练数据):4d} | FPS: {帧率:5.1f} | "
+                        print(f"📊 帧数: {总帧数:4d} | FPS: {帧率:5.1f} | "
                               f"动作: {当前动作} | 评分: {current_score:.1f} | "
+                              f"片段-保存:{保存计数} 过滤:{过滤计数} | "
                               f"高:{stats['high']} 中:{stats['medium']} 低:{stats['low']}")
                     else:
-                        print(f"📊 帧数: {len(训练数据):4d} | FPS: {帧率:5.1f} | 动作: {当前动作}")
+                        print(f"📊 帧数: {总帧数:4d} | FPS: {帧率:5.1f} | 动作: {当前动作}")
                     
                     上次时间 = 当前时间
                 
@@ -573,6 +582,7 @@ def 主程序():
                 if len(训练数据) >= 每文件样本数:
                     np.save(文件名, 训练数据)
                     print(f"\n💾 已保存: {文件名} ({len(训练数据)} 帧)")
+                    print(f"   📈 过滤统计: 总片段 {总片段数}, 保存 {保存计数}, 过滤 {过滤计数}")
                     训练数据 = []
                     文件编号 += 1
                     文件名 = os.path.join(数据目录, f'训练数据-{文件编号}.npy')
@@ -583,6 +593,17 @@ def 主程序():
     finally:
         cv2.destroyAllWindows()
         
+        # 处理缓冲区中剩余的数据（最后一个未完成的片段）
+        if 片段缓冲区:
+            # 评估最后一个片段
+            score, level, should_filter, reasons = smart_recorder.end_segment()
+            总片段数 += 1
+            if smart_recorder.should_save_segment(score, level, should_filter):
+                训练数据.extend(片段缓冲区)
+                保存计数 += 1
+            else:
+                过滤计数 += 1
+        
         if 训练数据:
             np.save(文件名, 训练数据)
             print(f"\n💾 已保存剩余数据: {文件名} ({len(训练数据)} 帧)")
@@ -590,6 +611,14 @@ def 主程序():
         print("\n" + "=" * 50)
         print("✅ 数据收集完成!")
         print(f"📁 数据保存在: {数据目录}")
+        
+        # 显示过滤统计
+        if 智能录制可用 and 总片段数 > 0:
+            过滤率 = (过滤计数 / 总片段数) * 100 if 总片段数 > 0 else 0
+            print(f"\n📊 过滤统计:")
+            print(f"   总片段数: {总片段数}")
+            print(f"   保存片段: {保存计数} ({(保存计数/总片段数)*100:.1f}%)")
+            print(f"   过滤片段: {过滤计数} ({过滤率:.1f}%)")
         
         # 显示智能录制报告
         if 智能录制可用:
