@@ -4,7 +4,6 @@
 
 实现无边框窗口的自定义标题栏，包含:
 - 应用图标和标题
-- 配置按钮（打开配置界面对话框）
 - 最小化、最大化、关闭按钮
 - 窗口拖动功能
 
@@ -14,8 +13,6 @@
 - 按钮宽度: 46px
 - 按钮悬停: 半透明白色
 - 关闭按钮悬停: 红色 #E81123
-
-需求: 1.1 - 配置界面入口
 """
 
 from PySide6.QtWidgets import (
@@ -30,14 +27,12 @@ class 自定义标题栏(QWidget):
     自定义标题栏组件
     
     提供窗口拖动、最小化、最大化/还原、关闭功能
-    以及配置界面入口按钮
     """
     
     # 信号定义
     最小化请求 = Signal()
     最大化请求 = Signal()
     关闭请求 = Signal()
-    配置请求 = Signal()  # 打开配置界面的信号
     
     def __init__(self, 父窗口: QWidget = None):
         """
@@ -161,39 +156,6 @@ class 自定义标题栏(QWidget):
         """)
         return 按钮
     
-    def _创建功能按钮(self, 文字: str, 提示: str) -> QPushButton:
-        """
-        创建功能按钮（如配置按钮）
-        
-        参数:
-            文字: 按钮显示的文字
-            提示: 按钮的工具提示
-        
-        返回:
-            QPushButton实例
-        """
-        按钮 = QPushButton(文字)
-        按钮.setFixedSize(46, 36)
-        按钮.setToolTip(提示)
-        按钮.setCursor(Qt.ArrowCursor)
-        按钮.setStyleSheet("""
-            QPushButton {
-                background-color: transparent;
-                border: none;
-                color: #FFFFFF;
-                font-family: "Microsoft YaHei UI", sans-serif;
-                font-size: 12px;
-                margin-right: 8px;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.2);
-            }
-            QPushButton:pressed {
-                background-color: rgba(255, 255, 255, 0.3);
-            }
-        """)
-        return 按钮
-    
     def _应用样式(self) -> None:
         """应用样式表"""
         # 注意：背景色通过 paintEvent 绘制，确保不被全局样式覆盖
@@ -210,10 +172,6 @@ class 自定义标题栏(QWidget):
         self.最小化请求.emit()
         if self._父窗口:
             self._父窗口.showMinimized()
-    
-    def _处理配置(self) -> None:
-        """处理配置按钮点击 (需求 1.1)"""
-        self.配置请求.emit()
     
     def _处理最大化(self) -> None:
         """处理最大化/还原按钮点击"""

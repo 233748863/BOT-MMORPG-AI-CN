@@ -211,7 +211,6 @@ class MainWindow(QMainWindow):
         
         # 创建自定义标题栏
         self._标题栏 = 自定义标题栏(self)
-        self._标题栏.配置请求.connect(self._打开配置界面)  # 连接配置按钮信号
         主垂直布局.addWidget(self._标题栏)
         
         # 创建内容区容器
@@ -500,15 +499,6 @@ class MainWindow(QMainWindow):
     def _处理配置重置(self) -> None:
         """处理配置重置完成"""
         self._状态栏.showMessage("配置已重置", 3000)
-    
-    def _打开配置界面(self) -> None:
-        """打开配置界面
-        
-        需求: 1.1 - 配置界面入口
-        
-        修改: 现在切换到配置页面，而不是打开独立对话框
-        """
-        self.切换页面("配置")
     
     def _注册数据管理页(self) -> None:
         """注册数据管理页面组件"""
