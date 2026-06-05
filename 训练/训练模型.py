@@ -21,6 +21,7 @@ from random import shuffle
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from 核心.模型定义 import inception_v3
+from 核心.动作空间 import 标准化动作标签
 from 配置.设置 import (
     模型输入宽度, 模型输入高度, 学习率,
     训练轮数, 模型保存路径, 数据保存路径, 总动作数,
@@ -133,9 +134,16 @@ def 加载训练数据(文件路径):
     try:
         数据 = np.load(文件路径, allow_pickle=True)
         
-        # 分割训练集和测试集 (最后50个样本作为测试)
-        训练数据 = 数据[:-50]
-        测试数据 = 数据[-50:]
+        if len(数据) == 0:
+            return None, None
+
+        if len(数据) <= 50:
+            训练数据 = 数据
+            测试数据 = 数据[:min(10, len(数据))]
+        else:
+            # 分割训练集和测试集 (最后50个样本作为测试)
+            训练数据 = 数据[:-50]
+            测试数据 = 数据[-50:]
         
         return 训练数据, 测试数据
     
@@ -161,7 +169,7 @@ def 准备批次数据(数据, 宽度, 高度):
     X = X图像.reshape(-1, 宽度, 高度, 3)
     
     # 提取标签
-    Y = [样本[1] for 样本 in 数据]
+    Y = np.array([标准化动作标签(样本[1]) for 样本 in 数据], dtype=np.float32)
     
     return X, Y
 
@@ -502,6 +510,9 @@ def 主程序():
                 训练数据, 测试数据 = 加载训练数据(文件路径)
                 
                 if 训练数据 is None:
+                    continue
+                if len(训练数据) == 0 or len(测试数据) == 0:
+                    print(f"   ⚠️  跳过空数据文件: {os.path.basename(文件路径)}")
                     continue
                 
                 # 数据增强

@@ -10,6 +10,10 @@ import win32api as wapi
 for char in "ABCDEFGHIJKLMNOPQRSTUVWXYZ 123456789,.'$/\\":
     按键列表.append(char)
 
+特殊按键 = {
+    "Tab": 0x09,
+}
+
 
 def 检测按键():
     """
@@ -22,6 +26,9 @@ def 检测按键():
     for 按键 in 按键列表:
         if wapi.GetAsyncKeyState(ord(按键)):
             按下的键.append(按键)
+    for 名称, 虚拟键码 in 特殊按键.items():
+        if wapi.GetAsyncKeyState(虚拟键码):
+            按下的键.append(名称)
     return 按下的键
 
 

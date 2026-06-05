@@ -39,7 +39,7 @@ from 配置.设置 import 动作定义, 总动作数
 # 敌人数量策略
 敌人数量策略 = st.integers(min_value=0, max_value=10)
 
-# 模型预测策略 (32维概率向量)
+# 模型预测策略 (当前动作空间概率向量)
 模型预测策略 = st.lists(
     st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
     min_size=32,
@@ -86,7 +86,7 @@ class Test状态动作权重映射属性:
         """
         **Feature: game-ai-enhancement, Property 7: 状态-动作权重映射正确性**
         
-        对于任意游戏状态，返回的权重列表长度应该等于总动作数(32)
+        对于任意游戏状态，返回的权重列表长度应该等于总动作数
         """
         引擎 = 决策引擎()
         权重 = 引擎.获取状态动作权重(状态)

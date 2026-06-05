@@ -139,6 +139,7 @@ class 运行线程(QThread):
                 模型保存路径, 预训练模型路径, 总动作数, 训练模式,
                 运动检测阈值, 运动日志长度, 动作定义
             )
+            from 核心.动作空间 import 标准化动作权重
         except ImportError as e:
             self.错误发生.emit(f"导入模块失败: {str(e)}")
             self.任务完成.emit(False, f"导入模块失败: {str(e)}")
@@ -153,9 +154,9 @@ class 运行线程(QThread):
         
         # 设置动作权重
         if self._子模式 == '主线任务':
-            self._动作权重 = np.array(训练模式.主线任务['动作权重'])
+            self._动作权重 = np.array(标准化动作权重(训练模式.主线任务['动作权重']))
         else:
-            self._动作权重 = np.array(训练模式.自动战斗['动作权重'])
+            self._动作权重 = np.array(标准化动作权重(训练模式.自动战斗['动作权重']))
         
         # 初始化增强模块
         if self._启用增强:
@@ -247,7 +248,7 @@ class 运行线程(QThread):
                 状态数据 = {
                     "当前动作": 动作名称,
                     "动作来源": 来源,
-                    "游戏状态": self._上次状态,
+                    "游戏状态": self._上次状态.value if hasattr(self._上次状态, 'value') else self._上次状态,
                     "帧率": self._当前帧率,
                     "运动量": 平均运动量,
                     "增强模块": {
@@ -347,8 +348,10 @@ class 运行线程(QThread):
     
     def _预测动作(self, 屏幕: np.ndarray, 宽度: int, 高度: int) -> tuple:
         """使用基础模型预测动作"""
+        from 核心.动作空间 import 标准化动作向量
+
         预测结果 = self._模型.predict([屏幕.reshape(宽度, 高度, 3)])[0]
-        预测结果 = np.round(预测结果, decimals=2)
+        预测结果 = np.round(标准化动作向量(预测结果), decimals=2)
         
         加权预测 = np.array(预测结果) * self._动作权重
         动作索引 = np.argmax(np.abs(加权预测))
@@ -375,7 +378,7 @@ class 运行线程(QThread):
         if self._状态识别可用:
             try:
                 状态结果 = self._状态识别器.识别状态(屏幕, 检测结果列表)
-                当前状态 = 状态结果.状态.value if hasattr(状态结果.状态, 'value') else str(状态结果.状态)
+                当前状态 = 状态结果.状态
                 self._上次状态 = 当前状态
             except Exception:
                 pass
@@ -383,12 +386,13 @@ class 运行线程(QThread):
         # 使用决策引擎
         if self._决策引擎可用:
             try:
-                from 核心.数据类型 import 决策上下文, 实体类型
+                from 核心.数据类型 import 决策上下文, 实体类型, 游戏状态
                 
                 附近敌人数量 = len([r for r in 检测结果列表 if hasattr(r, '类型') and r.类型 == 实体类型.怪物])
+                决策状态 = self._上次状态 if isinstance(self._上次状态, 游戏状态) else 游戏状态.未知
                 
                 上下文 = 决策上下文(
-                    游戏状态=self._上次状态,
+                    游戏状态=决策状态,
                     检测结果=检测结果列表,
                     模型预测=模型预测,
                     血量百分比=1.0,
@@ -403,7 +407,8 @@ class 运行线程(QThread):
                 pass
         
         # 降级到基础模型
-        动作索引 = np.argmax(np.abs(np.array(模型预测) * self._动作权重))
+        from 核心.动作空间 import 标准化动作向量
+        动作索引 = np.argmax(np.abs(np.array(标准化动作向量(模型预测)) * self._动作权重))
         动作名称 = 动作定义.get(动作索引, {}).get("名称", f"动作{动作索引}")
         return 动作索引, 动作名称, "fallback"
 
@@ -414,12 +419,12 @@ class 运行线程(QThread):
                 前进, 后退, 左移, 右移,
                 前进左移, 前进右移, 后退左移, 后退右移, 无操作,
                 技能1, 技能2, 技能3, 技能4, 技能5, 技能6,
-                技能Q, 技能E, 技能R, 技能F,
+                技能Q, 技能E, 技能R, 技能G, 技能C,
                 跳跃, 切换目标, 交互,
-                Shift技能1, Shift技能2, Shift技能Q, Shift技能E,
+                Shift技能1, Shift技能2, Shift技能Q, Shift技能E, Shift技能R,
                 Ctrl技能1, Ctrl技能2, Ctrl技能Q
             )
-            from 核心.鼠标控制 import 左键点击, 右键点击, 中键点击
+            from 核心.鼠标控制 import 左键点击, 右键点击, 中键点击, 滚轮向上, 滚轮向下
             
             动作映射 = {
                 0: 前进, 1: 后退, 2: 左移, 3: 右移,
@@ -427,11 +432,12 @@ class 运行线程(QThread):
                 8: 无操作,
                 9: 技能1, 10: 技能2, 11: 技能3, 12: 技能4,
                 13: 技能5, 14: 技能6, 15: 技能Q, 16: 技能E,
-                17: 技能R, 18: 技能F,
-                19: 跳跃, 20: 切换目标, 21: 交互,
-                22: 左键点击, 23: 右键点击, 24: 中键点击,
-                25: Shift技能1, 26: Shift技能2, 27: Shift技能Q, 28: Shift技能E,
-                29: Ctrl技能1, 30: Ctrl技能2, 31: Ctrl技能Q,
+                17: 技能R, 18: 技能G, 19: 技能C,
+                20: 跳跃, 21: 切换目标, 22: 交互,
+                23: 左键点击, 24: 右键点击, 25: 中键点击,
+                26: 滚轮向上, 27: 滚轮向下,
+                28: Shift技能1, 29: Shift技能2, 30: Shift技能Q, 31: Shift技能E, 32: Shift技能R,
+                33: Ctrl技能1, 34: Ctrl技能2, 35: Ctrl技能Q,
             }
             
             执行函数 = 动作映射.get(动作索引)

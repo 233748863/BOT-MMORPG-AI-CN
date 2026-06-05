@@ -81,7 +81,8 @@ class Mock推理引擎:
         self._推理次数 = 0
         self._已初始化 = True
         self._最大延迟阈值 = 50.0
-        self.输出维度 = 32  # 模拟 32 个动作类别
+        from 配置.设置 import 总动作数
+        self.输出维度 = 总动作数
     
     def 预测(self, 图像: np.ndarray) -> list:
         """模拟推理预测"""

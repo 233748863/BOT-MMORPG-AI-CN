@@ -109,7 +109,8 @@ class Test状态动作权重:
         权重 = 引擎.获取状态动作权重(游戏状态.战斗)
         
         assert isinstance(权重, list)
-        assert len(权重) == 32  # 32维动作
+        from 配置.设置 import 总动作数
+        assert len(权重) == 总动作数
     
     def test_对话状态权重(self):
         """测试对话状态下的动作权重"""
@@ -117,7 +118,8 @@ class Test状态动作权重:
         权重 = 引擎.获取状态动作权重(游戏状态.对话)
         
         assert isinstance(权重, list)
-        assert len(权重) == 32
+        from 配置.设置 import 总动作数
+        assert len(权重) == 总动作数
     
     def test_不同状态权重不同(self):
         """测试不同状态的权重不同"""

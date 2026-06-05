@@ -33,9 +33,23 @@ except ImportError:
     动作定义 = {}
     数据保存路径 = "数据"
 
+try:
+    from 核心.动作空间 import 标准化动作标签
+except ImportError:
+    def 标准化动作标签(标签):
+        return 标签
+
 
 # 动作映射字典
 动作映射 = {i: 动作定义.get(i, {}).get("名称", f"动作{i}") for i in range(总动作数)}
+
+
+def 获取类别索引(标签) -> int:
+    """读取标签类别索引，并兼容旧 32 维 one-hot 数据。"""
+    标准标签 = 标准化动作标签(标签)
+    if isinstance(标准标签, (list, np.ndarray)):
+        return int(np.argmax(标准标签))
+    return int(标准标签)
 
 
 @dataclass
@@ -119,11 +133,7 @@ class 类别分析器:
                     数据 = np.load(文件路径, allow_pickle=True)
                     
                     for _, 动作 in 数据:
-                        if isinstance(动作, (list, np.ndarray)):
-                            类别 = int(np.argmax(动作))
-                        else:
-                            类别 = int(动作)
-                        
+                        类别 = 获取类别索引(动作)
                         self._类别统计[类别] += 1
                         self._总样本数 += 1
                         
@@ -515,10 +525,7 @@ class 采样器:
         
         for 样本 in self.数据集:
             图像, 标签 = 样本
-            if isinstance(标签, (list, np.ndarray)):
-                类别 = int(np.argmax(标签))
-            else:
-                类别 = int(标签)
+            类别 = 获取类别索引(标签)
             
             if 类别 not in self._类别数据:
                 self._类别数据[类别] = []
@@ -526,9 +533,7 @@ class 采样器:
     
     def _获取标签(self, 标签) -> int:
         """获取类别索引"""
-        if isinstance(标签, (list, np.ndarray)):
-            return int(np.argmax(标签))
-        return int(标签)
+        return 获取类别索引(标签)
     
     def _打乱数据(self, 数据: List[Tuple[Any, Any]]) -> List[Tuple[Any, Any]]:
         """打乱数据顺序"""

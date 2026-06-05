@@ -96,7 +96,7 @@ class 决策上下文:
     """决策时的上下文信息"""
     游戏状态: 游戏状态
     检测结果: List[检测结果] = field(default_factory=list)
-    模型预测: List[float] = field(default_factory=list)  # 32维动作概率
+    模型预测: List[float] = field(default_factory=list)  # 36维动作概率
     血量百分比: float = 1.0
     附近敌人数量: int = 0
     上次动作: Optional[int] = None

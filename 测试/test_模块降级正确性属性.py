@@ -21,15 +21,16 @@ from unittest.mock import Mock, patch, MagicMock
 import numpy as np
 
 from 核心.数据类型 import 游戏状态, 检测结果, 决策上下文, 实体类型
+from 配置.设置 import 总动作数
 
 
 # ==================== 策略定义 ====================
 
-# 模型预测策略 (32维概率向量)
+# 模型预测策略 (当前动作空间概率向量)
 模型预测策略 = st.lists(
     st.floats(min_value=0.0, max_value=1.0, allow_nan=False, allow_infinity=False),
-    min_size=32,
-    max_size=32
+    min_size=总动作数,
+    max_size=总动作数
 )
 
 # 游戏状态策略
@@ -80,7 +81,7 @@ class 模拟增强机器人:
         self._上次状态 = 游戏状态.未知
         
         # 动作权重
-        self.动作权重 = np.ones(32)
+        self.动作权重 = np.ones(总动作数)
     
     def 初始化YOLO检测器(self, 检测器=None, 会出错=False, 错误类型=Exception, 错误消息=""):
         """初始化YOLO检测器，可配置是否出错"""
@@ -236,7 +237,7 @@ class Test模块降级正确性属性:
         动作索引, 动作名称, 来源 = 机器人.增强决策(模型预测)
         
         assert isinstance(动作索引, int), "动作索引应该是整数"
-        assert 0 <= 动作索引 < 32, "动作索引应该在有效范围内"
+        assert 0 <= 动作索引 < 总动作数, "动作索引应该在有效范围内"
         assert 来源 == "fallback", "决策来源应该是fallback"
     
     @given(
@@ -265,7 +266,7 @@ class Test模块降级正确性属性:
         动作索引, 动作名称, 来源 = 机器人.增强决策(模型预测)
         
         assert isinstance(动作索引, int), "动作索引应该是整数"
-        assert 0 <= 动作索引 < 32, "动作索引应该在有效范围内"
+        assert 0 <= 动作索引 < 总动作数, "动作索引应该在有效范围内"
     
     @given(
         错误类型=错误类型策略,
@@ -293,7 +294,7 @@ class Test模块降级正确性属性:
         动作索引, 动作名称, 来源 = 机器人.增强决策(模型预测)
         
         assert isinstance(动作索引, int), "动作索引应该是整数"
-        assert 0 <= 动作索引 < 32, "动作索引应该在有效范围内"
+        assert 0 <= 动作索引 < 总动作数, "动作索引应该在有效范围内"
         assert 来源 == "fallback", "决策来源应该是fallback"
     
     @given(模型预测=模型预测策略)
@@ -333,7 +334,7 @@ class Test模块降级正确性属性:
         
         assert 来源 == "fallback", "所有模块失败时应该使用fallback模式"
         assert isinstance(动作索引, int), "动作索引应该是整数"
-        assert 0 <= 动作索引 < 32, "动作索引应该在有效范围内"
+        assert 0 <= 动作索引 < 总动作数, "动作索引应该在有效范围内"
     
     @given(模型预测=模型预测策略)
     @settings(max_examples=100)
@@ -359,7 +360,7 @@ class Test模块降级正确性属性:
         动作索引, 动作名称, 来源 = 机器人.增强决策(模型预测)
         
         assert isinstance(动作索引, int), "动作索引应该是整数"
-        assert 0 <= 动作索引 < 32, "动作索引应该在有效范围内"
+        assert 0 <= 动作索引 < 总动作数, "动作索引应该在有效范围内"
     
     @given(模型预测=模型预测策略)
     @settings(max_examples=100)
@@ -385,7 +386,7 @@ class Test模块降级正确性属性:
         动作索引, 动作名称, 来源 = 机器人.增强决策(模型预测)
         
         assert isinstance(动作索引, int), "动作索引应该是整数"
-        assert 0 <= 动作索引 < 32, "动作索引应该在有效范围内"
+        assert 0 <= 动作索引 < 总动作数, "动作索引应该在有效范围内"
         # 缓存的状态应该保持不变
         assert 机器人._上次状态 == 游戏状态.战斗, "缓存状态应该保持不变"
     
@@ -411,7 +412,7 @@ class Test模块降级正确性属性:
         
         assert 来源 == "fallback", "决策引擎出错时应该使用fallback模式"
         assert isinstance(动作索引, int), "动作索引应该是整数"
-        assert 0 <= 动作索引 < 32, "动作索引应该在有效范围内"
+        assert 0 <= 动作索引 < 总动作数, "动作索引应该在有效范围内"
     
     @given(模型预测=模型预测策略)
     @settings(max_examples=100)
@@ -483,7 +484,7 @@ class Test模块降级正确性属性:
         
         # 验证结果有效
         assert isinstance(动作索引, int), "动作索引应该是整数"
-        assert 0 <= 动作索引 < 32, "动作索引应该在有效范围内"
+        assert 0 <= 动作索引 < 总动作数, "动作索引应该在有效范围内"
         assert isinstance(动作名称, str), "动作名称应该是字符串"
         assert 来源 in ["rule", "model", "mixed", "fallback"], f"来源'{来源}'应该是有效值"
     
@@ -506,7 +507,7 @@ class Test模块降级正确性属性:
         
         assert 来源 == "fallback", "禁用增强时应该使用fallback模式"
         assert isinstance(动作索引, int), "动作索引应该是整数"
-        assert 0 <= 动作索引 < 32, "动作索引应该在有效范围内"
+        assert 0 <= 动作索引 < 总动作数, "动作索引应该在有效范围内"
 
 
 class Test模块管理器降级属性:

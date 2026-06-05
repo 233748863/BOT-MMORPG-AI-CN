@@ -207,9 +207,7 @@ class 训练线程(QThread):
                         run_id=模型保存路径
                     )
                     
-                    # 获取损失值 (模拟，实际需要从模型获取)
-                    # 这里使用一个简单的模拟损失值
-                    损失值 = self._获取模拟损失值(轮次, 计数, 总文件数)
+                    损失值 = self._获取实际损失值(模型, X训练, Y训练)
                     轮次损失列表.append(损失值)
                     
                     # 更新进度
@@ -268,6 +266,9 @@ class 训练线程(QThread):
         """
         try:
             数据 = np.load(文件路径, allow_pickle=True)
+
+            if len(数据) == 0:
+                return None, None
             
             if len(数据) < 50:
                 # 数据太少，全部用于训练
@@ -295,24 +296,22 @@ class 训练线程(QThread):
         X = X图像.reshape(-1, 宽度, 高度, 3)
         
         # 提取标签
-        Y = [样本[1] for 样本 in 数据]
+        from 核心.动作空间 import 标准化动作标签
+        Y = np.array([标准化动作标签(样本[1]) for 样本 in 数据], dtype=np.float32)
         
         return X, Y
     
-    def _获取模拟损失值(self, 轮次: int, 文件索引: int, 总文件数: int) -> float:
-        """
-        获取模拟的损失值
-        
-        注意: 实际应用中应该从模型训练过程中获取真实损失值
-        这里使用模拟值用于界面演示
-        """
-        # 模拟损失值随训练进度下降
-        基础损失 = 1.0
-        轮次衰减 = 0.8 ** 轮次
-        文件衰减 = 1.0 - (文件索引 / 总文件数) * 0.1
-        随机波动 = np.random.uniform(0.9, 1.1)
-        
-        return 基础损失 * 轮次衰减 * 文件衰减 * 随机波动
+    def _获取实际损失值(self, 模型, X训练, Y训练) -> float:
+        """从模型评估结果读取当前批次损失。"""
+        try:
+            评估结果 = 模型.evaluate({'input': X训练}, {'targets': Y训练})
+            if isinstance(评估结果, (list, tuple)) and 评估结果:
+                return float(评估结果[0])
+            if isinstance(评估结果, (int, float)):
+                return float(评估结果)
+        except Exception as e:
+            self.日志消息.emit(f"获取训练损失失败: {str(e)}", "警告")
+        return 0.0
     
     def 请求停止(self) -> None:
         """请求停止线程"""
